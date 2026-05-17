@@ -35,6 +35,7 @@ type DataTableProps<T> = {
   searchValue: string
   onSearchChange: (q: string) => void
   searchPlaceholder?: string
+  showSearch?: boolean
 }
 
 export function DataTable<T>({
@@ -51,6 +52,7 @@ export function DataTable<T>({
   searchValue,
   onSearchChange,
   searchPlaceholder = "Buscar...",
+  showSearch = true,
 }: DataTableProps<T>) {
   const [draftSearch, setDraftSearch] = React.useState(searchValue)
   const debouncedSearch = useDebounce(draftSearch, 250)
@@ -72,17 +74,19 @@ export function DataTable<T>({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <div className="relative w-full max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={draftSearch}
-            onChange={(event) => setDraftSearch(event.target.value)}
-            placeholder={searchPlaceholder}
-            className="pl-9"
-          />
+      {showSearch ? (
+        <div className="flex items-center gap-2">
+          <div className="relative w-full max-w-sm">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={draftSearch}
+              onChange={(event) => setDraftSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+              className="pl-9"
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-md border">
         <Table>
