@@ -288,6 +288,319 @@ func TestGetWorkOrder_NotFound(t *testing.T) {
 	assertError(t, res, http.StatusNotFound, "not_found")
 }
 
+func TestUpdate_ChangesDiagnosis(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Update", "WO-UPDATE")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	res := patchJSON(t, client, ts.URL+"/api/v1/work-orders/"+created.WorkOrder.Ucode, map[string]any{
+		"diagnosis": "placa madre quemada",
+	}, csrf)
+	defer res.Body.Close()
+	body := decodeWorkOrderBody(t, res, http.StatusOK)
+	if body.WorkOrder.Diagnosis == nil || *body.WorkOrder.Diagnosis != "placa madre quemada" {
+		t.Fatalf("diagnosis = %v, want placa madre quemada", body.WorkOrder.Diagnosis)
+	}
+}
+
+func TestUpdate_RejectsInvalidServiceType(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Update Invalid", "WO-UPDATE-INVALID")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	res := patchJSON(t, client, ts.URL+"/api/v1/work-orders/"+created.WorkOrder.Ucode, map[string]any{
+		"service_type": "weird",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "invalid_body")
+}
+
+func TestTransition_StartDiagnosis(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Diagnostico", "WO-DIAG")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, created.WorkOrder.Ucode, "start_diagnosis", map[string]any{}, http.StatusOK)
+	if body.WorkOrder.Status != "diagnosing" {
+		t.Fatalf("status = %q, want diagnosing", body.WorkOrder.Status)
+	}
+}
+
+func TestTransition_Quote_RequiresAmount(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Quote Req", "WO-QUOTE-REQ")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+	transitionWorkOrder(t, client, ts.URL, csrf, created.WorkOrder.Ucode, "start_diagnosis", map[string]any{}, http.StatusOK)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/work-orders/"+created.WorkOrder.Ucode+"/transitions/quote", map[string]any{}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "invalid_body")
+}
+
+func TestTransition_Quote_OK(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Quote OK", "WO-QUOTE-OK")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+	transitionWorkOrder(t, client, ts.URL, csrf, created.WorkOrder.Ucode, "start_diagnosis", map[string]any{}, http.StatusOK)
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, created.WorkOrder.Ucode, "quote", map[string]any{
+		"quote_amount": "15000.00",
+		"diagnosis":    "fuente quemada",
+	}, http.StatusOK)
+	if body.WorkOrder.Status != "quoted" {
+		t.Fatalf("status = %q, want quoted", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.QuoteSentTs == nil {
+		t.Fatal("quote_sent_ts is nil")
+	}
+	if body.WorkOrder.QuoteAmount == nil || *body.WorkOrder.QuoteAmount != "15000.00" {
+		t.Fatalf("quote_amount = %v, want 15000.00", body.WorkOrder.QuoteAmount)
+	}
+}
+
+func TestTransition_Approve(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Approve", "WO-APPROVE")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	quoted := quotedWorkOrder(t, client, ts.URL, csrf, fixture)
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, quoted.WorkOrder.Ucode, "approve", map[string]any{}, http.StatusOK)
+	if body.WorkOrder.Status != "approved" {
+		t.Fatalf("status = %q, want approved", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.QuoteApprovedTs == nil {
+		t.Fatal("quote_approved_ts is nil")
+	}
+}
+
+func TestTransition_Reject(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Reject", "WO-REJECT")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	quoted := quotedWorkOrder(t, client, ts.URL, csrf, fixture)
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, quoted.WorkOrder.Ucode, "reject", map[string]any{}, http.StatusOK)
+	if body.WorkOrder.Status != "rejected" {
+		t.Fatalf("status = %q, want rejected", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.QuoteRejectedTs == nil {
+		t.Fatal("quote_rejected_ts is nil")
+	}
+}
+
+func TestTransition_StartRepair_FromApproved(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Repair", "WO-REPAIR")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	quoted := quotedWorkOrder(t, client, ts.URL, csrf, fixture)
+	approved := transitionWorkOrder(t, client, ts.URL, csrf, quoted.WorkOrder.Ucode, "approve", map[string]any{}, http.StatusOK)
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, approved.WorkOrder.Ucode, "start_repair", map[string]any{}, http.StatusOK)
+	if body.WorkOrder.Status != "in_repair" {
+		t.Fatalf("status = %q, want in_repair", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.StartedTs == nil {
+		t.Fatal("started_ts is nil")
+	}
+}
+
+func TestTransition_MarkReady_WithFinals(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Ready", "WO-READY")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	quoted := quotedWorkOrder(t, client, ts.URL, csrf, fixture)
+	approved := transitionWorkOrder(t, client, ts.URL, csrf, quoted.WorkOrder.Ucode, "approve", map[string]any{}, http.StatusOK)
+	repair := transitionWorkOrder(t, client, ts.URL, csrf, approved.WorkOrder.Ucode, "start_repair", map[string]any{}, http.StatusOK)
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, repair.WorkOrder.Ucode, "mark_ready", map[string]any{
+		"labor_amount": "10000.00",
+		"parts_amount": "5000.00",
+		"final_amount": "15000.00",
+	}, http.StatusOK)
+	if body.WorkOrder.Status != "ready" {
+		t.Fatalf("status = %q, want ready", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.ReadyTs == nil {
+		t.Fatal("ready_ts is nil")
+	}
+	assertMoneyPtr(t, body.WorkOrder.LaborAmount, "10000.00")
+	assertMoneyPtr(t, body.WorkOrder.PartsAmount, "5000.00")
+	assertMoneyPtr(t, body.WorkOrder.FinalAmount, "15000.00")
+}
+
+func TestTransition_Deliver(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Deliver", "WO-DELIVER")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	ready := readyWorkOrder(t, client, ts.URL, csrf, fixture)
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, ready.WorkOrder.Ucode, "deliver", map[string]any{}, http.StatusOK)
+	if body.WorkOrder.Status != "delivered" {
+		t.Fatalf("status = %q, want delivered", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.DeliveredTs == nil {
+		t.Fatal("delivered_ts is nil")
+	}
+}
+
+func TestTransition_Cancel_WithReason(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Cancel", "WO-CANCEL")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	body := transitionWorkOrder(t, client, ts.URL, csrf, created.WorkOrder.Ucode, "cancel", map[string]any{
+		"cancel_reason": "cliente arrepintio",
+	}, http.StatusOK)
+	if body.WorkOrder.Status != "cancelled" {
+		t.Fatalf("status = %q, want cancelled", body.WorkOrder.Status)
+	}
+	if body.WorkOrder.CancelledTs == nil {
+		t.Fatal("cancelled_ts is nil")
+	}
+	if body.WorkOrder.CancelReason == nil || *body.WorkOrder.CancelReason != "cliente arrepintio" {
+		t.Fatalf("cancel_reason = %v, want cliente arrepintio", body.WorkOrder.CancelReason)
+	}
+}
+
+func TestTransition_FromDelivered_AnyEvent(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Delivered Invalid", "WO-DELIVERED-INVALID")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	ready := readyWorkOrder(t, client, ts.URL, csrf, fixture)
+	delivered := transitionWorkOrder(t, client, ts.URL, csrf, ready.WorkOrder.Ucode, "deliver", map[string]any{}, http.StatusOK)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/work-orders/"+delivered.WorkOrder.Ucode+"/transitions/start_repair", map[string]any{}, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusConflict, readBody(t, res))
+	}
+	var body struct {
+		Error         string   `json:"error"`
+		From          string   `json:"from"`
+		AllowedEvents []string `json:"allowed_events"`
+	}
+	decodeJSON(t, res.Body, &body)
+	if body.Error != "invalid_transition" || body.From != "delivered" || len(body.AllowedEvents) != 0 {
+		t.Fatalf("body = %+v, want invalid_transition from delivered with no allowed events", body)
+	}
+}
+
+func TestTransition_UnknownEvent(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Unknown Event", "WO-UNKNOWN-EVENT")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	res := postJSON(t, client, ts.URL+"/api/v1/work-orders/"+created.WorkOrder.Ucode+"/transitions/nonsense", map[string]any{}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "unknown_event")
+}
+
+func TestTransition_FromReceived_Approve(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Invalid Edge", "WO-INVALID-EDGE")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	res := postJSON(t, client, ts.URL+"/api/v1/work-orders/"+created.WorkOrder.Ucode+"/transitions/approve", map[string]any{}, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusConflict, readBody(t, res))
+	}
+	var body struct {
+		Error string `json:"error"`
+		From  string `json:"from"`
+		Event string `json:"event"`
+	}
+	decodeJSON(t, res.Body, &body)
+	if body.Error != "invalid_transition" || body.From != "received" || body.Event != "approve" {
+		t.Fatalf("body = %+v, want invalid approve from received", body)
+	}
+}
+
+func TestTransition_OnSite_FastTrack(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente On Site Flow", "WO-ONSITE-FLOW")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	created := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "on_site")
+
+	repair := transitionWorkOrder(t, client, ts.URL, csrf, created.WorkOrder.Ucode, "start_repair", map[string]any{}, http.StatusOK)
+	ready := transitionWorkOrder(t, client, ts.URL, csrf, repair.WorkOrder.Ucode, "mark_ready", map[string]any{}, http.StatusOK)
+	delivered := transitionWorkOrder(t, client, ts.URL, csrf, ready.WorkOrder.Ucode, "deliver", map[string]any{}, http.StatusOK)
+	if repair.WorkOrder.Status != "in_repair" || ready.WorkOrder.Status != "ready" || delivered.WorkOrder.Status != "delivered" {
+		t.Fatalf("statuses = %q/%q/%q, want in_repair/ready/delivered", repair.WorkOrder.Status, ready.WorkOrder.Status, delivered.WorkOrder.Status)
+	}
+	if delivered.WorkOrder.QuoteSentTs != nil {
+		t.Fatalf("quote_sent_ts = %v, want nil", delivered.WorkOrder.QuoteSentTs)
+	}
+}
+
 type workOrderFixture struct {
 	client sqlc.Client
 	device sqlc.Device
@@ -351,6 +664,38 @@ func searchWorkOrders(t *testing.T, client *http.Client, baseURL, query string) 
 	var body workOrderSearchBody
 	decodeJSON(t, res.Body, &body)
 	return body
+}
+
+func transitionWorkOrder(t *testing.T, client *http.Client, baseURL, csrf, ucode, event string, payload any, status int) workOrderBody {
+	t.Helper()
+	res := postJSON(t, client, baseURL+"/api/v1/work-orders/"+ucode+"/transitions/"+event, payload, csrf)
+	defer res.Body.Close()
+	return decodeWorkOrderBody(t, res, status)
+}
+
+func quotedWorkOrder(t *testing.T, client *http.Client, baseURL, csrf string, fixture workOrderFixture) workOrderBody {
+	t.Helper()
+	created := intakeWorkOrder(t, client, baseURL, csrf, fixture.client, fixture.device, "in_shop")
+	transitionWorkOrder(t, client, baseURL, csrf, created.WorkOrder.Ucode, "start_diagnosis", map[string]any{}, http.StatusOK)
+	return transitionWorkOrder(t, client, baseURL, csrf, created.WorkOrder.Ucode, "quote", map[string]any{
+		"quote_amount": "15000.00",
+		"diagnosis":    "fuente quemada",
+	}, http.StatusOK)
+}
+
+func readyWorkOrder(t *testing.T, client *http.Client, baseURL, csrf string, fixture workOrderFixture) workOrderBody {
+	t.Helper()
+	quoted := quotedWorkOrder(t, client, baseURL, csrf, fixture)
+	approved := transitionWorkOrder(t, client, baseURL, csrf, quoted.WorkOrder.Ucode, "approve", map[string]any{}, http.StatusOK)
+	repair := transitionWorkOrder(t, client, baseURL, csrf, approved.WorkOrder.Ucode, "start_repair", map[string]any{}, http.StatusOK)
+	return transitionWorkOrder(t, client, baseURL, csrf, repair.WorkOrder.Ucode, "mark_ready", map[string]any{}, http.StatusOK)
+}
+
+func assertMoneyPtr(t *testing.T, got *string, want string) {
+	t.Helper()
+	if got == nil || *got != want {
+		t.Fatalf("money = %v, want %s", got, want)
+	}
 }
 
 func sameStringSet(got, want []string) bool {

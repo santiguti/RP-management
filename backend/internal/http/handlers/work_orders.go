@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -69,6 +70,25 @@ type intakeReq struct {
 	IntakeNotes   *string `json:"intake_notes" validate:"omitempty,max=4000"`
 	Accessories   *string `json:"accessories" validate:"omitempty,max=2000"`
 	DevicePin     *string `json:"device_pin" validate:"omitempty,max=64"`
+}
+
+type updateWorkOrderReq struct {
+	ServiceType   *string `json:"service_type" validate:"omitempty,oneof=in_shop on_site"`
+	ReportedIssue *string `json:"reported_issue" validate:"omitempty,min=1,max=2000"`
+	Diagnosis     *string `json:"diagnosis" validate:"omitempty,max=4000"`
+	IntakeNotes   *string `json:"intake_notes" validate:"omitempty,max=4000"`
+	Accessories   *string `json:"accessories" validate:"omitempty,max=2000"`
+	DevicePin     *string `json:"device_pin" validate:"omitempty,max=64"`
+}
+
+type transitionReq struct {
+	QuoteAmount   *string `json:"quote_amount" validate:"omitempty"`
+	QuoteCurrency *string `json:"quote_currency" validate:"omitempty,len=3"`
+	Diagnosis     *string `json:"diagnosis" validate:"omitempty,max=4000"`
+	LaborAmount   *string `json:"labor_amount" validate:"omitempty"`
+	PartsAmount   *string `json:"parts_amount" validate:"omitempty"`
+	FinalAmount   *string `json:"final_amount" validate:"omitempty"`
+	CancelReason  *string `json:"cancel_reason" validate:"omitempty,max=2000"`
 }
 
 type WorkOrders struct {
@@ -199,6 +219,210 @@ func (w *WorkOrders) Get(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": toWorkOrderDTO(row)})
 }
 
+func (w *WorkOrders) Update(rw http.ResponseWriter, r *http.Request) {
+	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
+	if !ok {
+		return
+	}
+	current, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+
+	var req updateWorkOrderReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+	trimUpdateWorkOrderReq(&req)
+	if err := w.val.Struct(req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+
+	params := sqlc.UpdateWorkOrderFieldsParams{
+		ID:                 current.WorkOrder.ID,
+		ServiceType:        current.WorkOrder.ServiceType,
+		ReportedIssue:      current.WorkOrder.ReportedIssue,
+		Diagnosis:          current.WorkOrder.Diagnosis,
+		IntakeNotes:        current.WorkOrder.IntakeNotes,
+		Accessories:        current.WorkOrder.Accessories,
+		DevicePinEncrypted: current.WorkOrder.DevicePinEncrypted,
+	}
+	if req.ServiceType != nil {
+		params.ServiceType = *req.ServiceType
+	}
+	if req.ReportedIssue != nil {
+		params.ReportedIssue = *req.ReportedIssue
+	}
+	if req.Diagnosis != nil {
+		params.Diagnosis = textFromPtr(req.Diagnosis)
+	}
+	if req.IntakeNotes != nil {
+		params.IntakeNotes = textFromPtr(req.IntakeNotes)
+	}
+	if req.Accessories != nil {
+		params.Accessories = textFromPtr(req.Accessories)
+	}
+	if req.DevicePin != nil {
+		params.DevicePinEncrypted = textFromPtr(req.DevicePin)
+	}
+
+	out, err := w.queries.UpdateWorkOrderFields(r.Context(), params)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
+		return
+	}
+	if err != nil {
+		log.Printf("update work order fields: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	updated, ok := w.workOrderByUcode(rw, r, out.Ucode)
+	if !ok {
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": toWorkOrderDTO(updated)})
+}
+
+func (w *WorkOrders) Transition(rw http.ResponseWriter, r *http.Request) {
+	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
+	if !ok {
+		return
+	}
+	event := workorder.Event(strings.TrimSpace(chi.URLParam(r, "event")))
+	if !isKnownWorkOrderEvent(event) {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "unknown_event"})
+		return
+	}
+	current, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+	currentStatus := workorder.Status(current.WorkOrder.Status)
+	newStatus, err := workorder.Next(currentStatus, event)
+	if errors.Is(err, workorder.ErrInvalidTransition) {
+		writeJSON(rw, http.StatusConflict, map[string]any{
+			"error":          "invalid_transition",
+			"from":           string(currentStatus),
+			"event":          string(event),
+			"allowed_events": allowedEventStrings(currentStatus),
+		})
+		return
+	}
+	if errors.Is(err, workorder.ErrUnknownEvent) {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "unknown_event"})
+		return
+	}
+	if errors.Is(err, workorder.ErrUnknownStatus) {
+		log.Printf("work order %s has unknown status %q", current.WorkOrder.WoNumber, current.WorkOrder.Status)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if err != nil {
+		log.Printf("work order transition: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	var req transitionReq
+	if err := decodeOptionalJSON(r.Body, &req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+	trimTransitionReq(&req)
+	if err := w.val.Struct(req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+
+	out, ok := w.applyTransition(rw, r, current.WorkOrder, event, newStatus, req)
+	if !ok {
+		return
+	}
+	updated, ok := w.workOrderByUcode(rw, r, out.Ucode)
+	if !ok {
+		return
+	}
+	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": toWorkOrderDTO(updated)})
+}
+
+func (w *WorkOrders) applyTransition(rw http.ResponseWriter, r *http.Request, current sqlc.WorkOrder, event workorder.Event, newStatus workorder.Status, req transitionReq) (sqlc.WorkOrder, bool) {
+	switch event {
+	case workorder.EventQuote:
+		if req.QuoteAmount == nil || strings.TrimSpace(*req.QuoteAmount) == "" {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+			return sqlc.WorkOrder{}, false
+		}
+		quoteAmount, err := stringToNumeric(*req.QuoteAmount)
+		if err != nil {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+			return sqlc.WorkOrder{}, false
+		}
+		out, err := w.queries.SetWorkOrderQuote(r.Context(), sqlc.SetWorkOrderQuoteParams{
+			ID:            current.ID,
+			Diagnosis:     textFromPtr(req.Diagnosis),
+			QuoteAmount:   quoteAmount,
+			QuoteCurrency: textFromPtr(req.QuoteCurrency),
+		})
+		return w.transitionResult(rw, out, err, "set work order quote")
+	case workorder.EventApprove, workorder.EventReject:
+		out, err := w.queries.SetWorkOrderQuoteOutcome(r.Context(), sqlc.SetWorkOrderQuoteOutcomeParams{
+			ID:     current.ID,
+			Status: string(newStatus),
+		})
+		return w.transitionResult(rw, out, err, "set work order quote outcome")
+	case workorder.EventMarkReady:
+		laborAmount, ok := numericFromPtr(rw, req.LaborAmount)
+		if !ok {
+			return sqlc.WorkOrder{}, false
+		}
+		partsAmount, ok := numericFromPtr(rw, req.PartsAmount)
+		if !ok {
+			return sqlc.WorkOrder{}, false
+		}
+		finalAmount, ok := numericFromPtr(rw, req.FinalAmount)
+		if !ok {
+			return sqlc.WorkOrder{}, false
+		}
+		params := sqlc.SetWorkOrderFinalsParams{
+			ID:          current.ID,
+			Diagnosis:   textFromPtr(req.Diagnosis),
+			LaborAmount: laborAmount,
+			PartsAmount: partsAmount,
+			FinalAmount: finalAmount,
+		}
+		out, err := w.queries.SetWorkOrderFinals(r.Context(), params)
+		return w.transitionResult(rw, out, err, "set work order finals")
+	case workorder.EventCancel:
+		out, err := w.queries.UpdateWorkOrderStatus(r.Context(), sqlc.UpdateWorkOrderStatusParams{
+			ID:           current.ID,
+			Status:       string(newStatus),
+			CancelReason: textFromPtr(req.CancelReason),
+		})
+		return w.transitionResult(rw, out, err, "cancel work order")
+	default:
+		out, err := w.queries.UpdateWorkOrderStatus(r.Context(), sqlc.UpdateWorkOrderStatusParams{
+			ID:     current.ID,
+			Status: string(newStatus),
+		})
+		return w.transitionResult(rw, out, err, "update work order status")
+	}
+}
+
+func (w *WorkOrders) transitionResult(rw http.ResponseWriter, out sqlc.WorkOrder, err error, logPrefix string) (sqlc.WorkOrder, bool) {
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
+		return sqlc.WorkOrder{}, false
+	}
+	if err != nil {
+		log.Printf("%s: %v", logPrefix, err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return sqlc.WorkOrder{}, false
+	}
+	return out, true
+}
+
 func (w *WorkOrders) resolveClient(rw http.ResponseWriter, r *http.Request, raw string) (sqlc.Client, bool) {
 	ucode, err := uuidFromString(raw)
 	if err != nil {
@@ -325,6 +549,38 @@ func numericToStringPtr(n pgtype.Numeric) *string {
 	return &out
 }
 
+func stringToNumeric(raw string) (pgtype.Numeric, error) {
+	var n pgtype.Numeric
+	if err := n.Scan(strings.TrimSpace(raw)); err != nil {
+		return pgtype.Numeric{}, err
+	}
+	return n, nil
+}
+
+func numericFromPtr(rw http.ResponseWriter, raw *string) (pgtype.Numeric, bool) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		if raw != nil {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+			return pgtype.Numeric{}, false
+		}
+		return pgtype.Numeric{}, true
+	}
+	n, err := stringToNumeric(*raw)
+	if err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return pgtype.Numeric{}, false
+	}
+	return n, true
+}
+
+func decodeOptionalJSON(r io.Reader, dst any) error {
+	err := json.NewDecoder(r).Decode(dst)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
+}
+
 func timeString(ts pgtype.Timestamptz) string {
 	if !ts.Valid {
 		return ""
@@ -367,6 +623,24 @@ func isKnownWorkOrderStatus(status string) bool {
 	}
 }
 
+func isKnownWorkOrderEvent(event workorder.Event) bool {
+	switch event {
+	case workorder.EventStartDiagnosis,
+		workorder.EventQuote,
+		workorder.EventApprove,
+		workorder.EventReject,
+		workorder.EventStartRepair,
+		workorder.EventMarkWaitingParts,
+		workorder.EventResumeRepair,
+		workorder.EventMarkReady,
+		workorder.EventDeliver,
+		workorder.EventCancel:
+		return true
+	default:
+		return false
+	}
+}
+
 func trimIntakeReq(req *intakeReq) {
 	req.ClientUcode = strings.TrimSpace(req.ClientUcode)
 	req.DeviceUcode = strings.TrimSpace(req.DeviceUcode)
@@ -375,4 +649,25 @@ func trimIntakeReq(req *intakeReq) {
 	trimStringPtr(req.IntakeNotes)
 	trimStringPtr(req.Accessories)
 	trimStringPtr(req.DevicePin)
+}
+
+func trimUpdateWorkOrderReq(req *updateWorkOrderReq) {
+	trimStringPtr(req.ServiceType)
+	trimStringPtr(req.ReportedIssue)
+	trimStringPtr(req.Diagnosis)
+	trimStringPtr(req.IntakeNotes)
+	trimStringPtr(req.Accessories)
+	trimStringPtr(req.DevicePin)
+}
+
+func trimTransitionReq(req *transitionReq) {
+	trimStringPtr(req.QuoteAmount)
+	if req.QuoteCurrency != nil {
+		*req.QuoteCurrency = strings.ToUpper(strings.TrimSpace(*req.QuoteCurrency))
+	}
+	trimStringPtr(req.Diagnosis)
+	trimStringPtr(req.LaborAmount)
+	trimStringPtr(req.PartsAmount)
+	trimStringPtr(req.FinalAmount)
+	trimStringPtr(req.CancelReason)
 }

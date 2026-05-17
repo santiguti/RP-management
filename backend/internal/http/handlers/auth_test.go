@@ -286,6 +286,8 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				wr.Post("/", workOrdersH.Intake)
 				wr.Get("/", workOrdersH.Search)
 				wr.Get("/{ucode}", workOrdersH.Get)
+				wr.Patch("/{ucode}", workOrdersH.Update)
+				wr.Post("/{ucode}/transitions/{event}", workOrdersH.Transition)
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))
