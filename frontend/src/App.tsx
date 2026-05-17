@@ -8,6 +8,8 @@ import { ProtectedRoute } from "@/components/protected-route"
 import { AppLayout } from "@/components/layout"
 import { ClientsListPage } from "@/pages/clients/list"
 import { ClientDetailPage } from "@/pages/clients/detail"
+import { RequireOwner } from "@/components/require-owner"
+import { LookupsPage } from "@/pages/settings/lookups"
 
 const qc = new QueryClient()
 
@@ -21,6 +23,14 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="clients" element={<ClientsListPage />} />
             <Route path="clients/:ucode" element={<ClientDetailPage />} />
+            <Route
+              path="settings/lookups"
+              element={
+                <RequireOwner>
+                  <LookupsPage />
+                </RequireOwner>
+              }
+            />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
