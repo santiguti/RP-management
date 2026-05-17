@@ -7,22 +7,43 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/santiguti/rp-management/backend/internal/config"
+	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/http/handlers"
+	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
 
 func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
+	queries := sqlc.New(pool)
+	authH := handlers.NewAuth(queries, cfg)
+
 	r := chi.NewRouter()
 
-	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(chimiddleware.RequestID)
+	r.Use(chimiddleware.RealIP)
+	r.Use(chimiddleware.Logger)
+	r.Use(chimiddleware.Recoverer)
+	r.Use(chimiddleware.Timeout(60 * time.Second))
 
 	r.Get("/healthz", healthz(pool))
+
+	r.Route("/api/v1", func(api chi.Router) {
+		api.Group(func(pub chi.Router) {
+			pub.Use(httprate.LimitByIP(5, time.Minute))
+			pub.Post("/auth/login", authH.Login)
+		})
+
+		api.Group(func(pr chi.Router) {
+			pr.Use(middleware.RequireSession(queries))
+			pr.Use(middleware.CSRF)
+			pr.Post("/auth/logout", authH.Logout)
+			pr.Get("/auth/me", authH.Me)
+		})
+	})
 
 	return r
 }
