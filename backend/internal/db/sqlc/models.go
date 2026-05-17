@@ -97,3 +97,41 @@ type User struct {
 	Role            string             `json:"role"`
 	LastLoginTs     pgtype.Timestamptz `json:"last_login_ts"`
 }
+
+type WoNumberCounter struct {
+	Year    int32 `json:"year"`
+	LastSeq int64 `json:"last_seq"`
+}
+
+type WorkOrder struct {
+	ID                 int64              `json:"id"`
+	Ucode              pgtype.UUID        `json:"ucode"`
+	CreatedTs          pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs           pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID     pgtype.Int8        `json:"voided_by_user_id"`
+	WoNumber           string             `json:"wo_number"`
+	DeviceID           int64              `json:"device_id"`
+	ClientID           int64              `json:"client_id"`
+	ServiceType        string             `json:"service_type"`
+	Status             string             `json:"status"`
+	ReportedIssue      string             `json:"reported_issue"`
+	Diagnosis          pgtype.Text        `json:"diagnosis"`
+	QuoteAmount        pgtype.Numeric     `json:"quote_amount"`
+	QuoteCurrency      string             `json:"quote_currency"`
+	QuoteSentTs        pgtype.Timestamptz `json:"quote_sent_ts"`
+	QuoteApprovedTs    pgtype.Timestamptz `json:"quote_approved_ts"`
+	QuoteRejectedTs    pgtype.Timestamptz `json:"quote_rejected_ts"`
+	FinalAmount        pgtype.Numeric     `json:"final_amount"`
+	LaborAmount        pgtype.Numeric     `json:"labor_amount"`
+	PartsAmount        pgtype.Numeric     `json:"parts_amount"`
+	IntakeNotes        pgtype.Text        `json:"intake_notes"`
+	Accessories        pgtype.Text        `json:"accessories"`
+	DevicePinEncrypted pgtype.Text        `json:"device_pin_encrypted"`
+	ReceivedTs         pgtype.Timestamptz `json:"received_ts"`
+	StartedTs          pgtype.Timestamptz `json:"started_ts"`
+	ReadyTs            pgtype.Timestamptz `json:"ready_ts"`
+	DeliveredTs        pgtype.Timestamptz `json:"delivered_ts"`
+	CancelledTs        pgtype.Timestamptz `json:"cancelled_ts"`
+	CancelReason       pgtype.Text        `json:"cancel_reason"`
+}

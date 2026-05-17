@@ -24,3 +24,5 @@ sql:
           rp_device_model: "DeviceModel"
           rp_article_type: "ArticleType"
           rp_device: "Device"
+          rp_wo_number_counter: "WoNumberCounter"
+          rp_work_order: "WorkOrder"

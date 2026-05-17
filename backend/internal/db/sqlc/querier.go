@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CountClients(ctx context.Context, q_ string) (int64, error)
+	CountWorkOrders(ctx context.Context, arg CountWorkOrdersParams) (int64, error)
 	CreateArticleType(ctx context.Context, arg CreateArticleTypeParams) (ArticleType, error)
 	CreateBrand(ctx context.Context, arg CreateBrandParams) (Brand, error)
 	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
@@ -19,6 +20,7 @@ type Querier interface {
 	CreateDeviceModel(ctx context.Context, arg CreateDeviceModelParams) (DeviceModel, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateWorkOrder(ctx context.Context, arg CreateWorkOrderParams) (WorkOrder, error)
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteSession(ctx context.Context, id []byte) error
 	GetArticleTypeByUcode(ctx context.Context, ucode pgtype.UUID) (ArticleType, error)
@@ -30,17 +32,23 @@ type Querier interface {
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetWorkOrderByUcode(ctx context.Context, ucode pgtype.UUID) (GetWorkOrderByUcodeRow, error)
 	ListArticleTypes(ctx context.Context) ([]ArticleType, error)
 	ListBrands(ctx context.Context) ([]Brand, error)
 	ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error)
 	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)
+	ListWorkOrders(ctx context.Context, arg ListWorkOrdersParams) ([]ListWorkOrdersRow, error)
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
 	SearchDevices(ctx context.Context, arg SearchDevicesParams) ([]SearchDevicesRow, error)
+	SetWorkOrderFinals(ctx context.Context, arg SetWorkOrderFinalsParams) (WorkOrder, error)
+	SetWorkOrderQuote(ctx context.Context, arg SetWorkOrderQuoteParams) (WorkOrder, error)
+	SetWorkOrderQuoteOutcome(ctx context.Context, arg SetWorkOrderQuoteOutcomeParams) (WorkOrder, error)
 	SoftDeleteArticleType(ctx context.Context, arg SoftDeleteArticleTypeParams) error
 	SoftDeleteBrand(ctx context.Context, arg SoftDeleteBrandParams) error
 	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
 	SoftDeleteDevice(ctx context.Context, arg SoftDeleteDeviceParams) error
 	SoftDeleteDeviceModel(ctx context.Context, arg SoftDeleteDeviceModelParams) error
+	SoftDeleteWorkOrder(ctx context.Context, arg SoftDeleteWorkOrderParams) error
 	TouchSession(ctx context.Context, id []byte) error
 	UpdateArticleType(ctx context.Context, arg UpdateArticleTypeParams) (ArticleType, error)
 	UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand, error)
@@ -48,6 +56,8 @@ type Querier interface {
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateDeviceModel(ctx context.Context, arg UpdateDeviceModelParams) (DeviceModel, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error
+	UpdateWorkOrderFields(ctx context.Context, arg UpdateWorkOrderFieldsParams) (WorkOrder, error)
+	UpdateWorkOrderStatus(ctx context.Context, arg UpdateWorkOrderStatusParams) (WorkOrder, error)
 }
 
 var _ Querier = (*Queries)(nil)
