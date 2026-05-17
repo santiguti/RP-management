@@ -219,6 +219,28 @@ func (w *WorkOrders) Get(rw http.ResponseWriter, r *http.Request) {
 	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": toWorkOrderDTO(row)})
 }
 
+func (w *WorkOrders) ListTransactions(rw http.ResponseWriter, r *http.Request) {
+	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
+	if !ok {
+		return
+	}
+	workOrder, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+	rows, err := w.queries.ListWorkOrderTransactions(r.Context(), pgtype.Int8{Int64: workOrder.WorkOrder.ID, Valid: true})
+	if err != nil {
+		log.Printf("list work order transactions: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	out := make([]transactionDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toTransactionDTO(enrichedFromWorkOrderTransaction(row)))
+	}
+	writeJSON(rw, http.StatusOK, map[string][]transactionDTO{"transactions": out})
+}
+
 func (w *WorkOrders) Update(rw http.ResponseWriter, r *http.Request) {
 	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
 	if !ok {
