@@ -196,11 +196,12 @@ func TestSearchClients_Pagination(t *testing.T) {
 	ts, client := newCookieServer(t, q)
 	defer ts.Close()
 	login(t, client, ts.URL, user.Username)
+	prefix := uniqueUsername(t) + "_cliente"
 	for i := 0; i < 30; i++ {
-		seedClient(t, q, fmt.Sprintf("Cliente %02d", i), "")
+		seedClient(t, q, fmt.Sprintf("%s %02d", prefix, i), "")
 	}
 
-	res, err := client.Get(ts.URL + "/api/v1/clients?page_size=10&page=2")
+	res, err := client.Get(ts.URL + "/api/v1/clients?q=" + prefix + "&page_size=10&page=2")
 	if err != nil {
 		t.Fatal(err)
 	}

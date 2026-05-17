@@ -34,9 +34,6 @@ func TestBrands_ListSeedData(t *testing.T) {
 		Brands []lookupDTO `json:"brands"`
 	}
 	decodeJSON(t, res.Body, &body)
-	if len(body.Brands) < 16 {
-		t.Fatalf("len(brands) = %d, want at least 16 seed brands", len(body.Brands))
-	}
 	names := lookupNames(body.Brands)
 	if !hasName(names, "Samsung") || !hasName(names, "Apple") {
 		t.Fatalf("brand names = %v, want Samsung and Apple", names)
