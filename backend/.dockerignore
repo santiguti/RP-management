@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+*.md
+.env
+.env.*
+!.env.example
+tmp/
+dist/
+vendor/
+**/*_test.go
