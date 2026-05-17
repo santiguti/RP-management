@@ -249,6 +249,7 @@ func testRouter(q *sqlc.Queries) http.Handler {
 	suppliersH := NewSuppliers(q)
 	transactionsH := NewTransactions(q)
 	recurringH := NewRecurringExpenses(q)
+	reportsH := NewReports(q)
 	brandsH := NewBrands(q)
 	modelsH := NewDeviceModels(q)
 	typesH := NewArticleTypes(q)
@@ -310,6 +311,11 @@ func testRouter(q *sqlc.Queries) http.Handler {
 					o.Delete("/{ucode}", recurringH.Delete)
 					o.Post("/{ucode}/run-now", recurringH.RunNow)
 				})
+			})
+			pr.Route("/reports", func(rr chi.Router) {
+				rr.Get("/balance", reportsH.Balance)
+				rr.Get("/pnl", reportsH.PnL)
+				rr.Get("/dashboard", reportsH.Dashboard)
 			})
 			pr.Route("/suppliers", func(sr chi.Router) {
 				sr.Get("/", suppliersH.List)

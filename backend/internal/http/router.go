@@ -26,6 +26,7 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 	suppliersH := handlers.NewSuppliers(queries)
 	transactionsH := handlers.NewTransactions(queries)
 	recurringH := handlers.NewRecurringExpenses(queries)
+	reportsH := handlers.NewReports(queries)
 	brandsH := handlers.NewBrands(queries)
 	modelsH := handlers.NewDeviceModels(queries)
 	typesH := handlers.NewArticleTypes(queries)
@@ -101,6 +102,11 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 					o.Delete("/{ucode}", recurringH.Delete)
 					o.Post("/{ucode}/run-now", recurringH.RunNow)
 				})
+			})
+			pr.Route("/reports", func(rr chi.Router) {
+				rr.Get("/balance", reportsH.Balance)
+				rr.Get("/pnl", reportsH.PnL)
+				rr.Get("/dashboard", reportsH.Dashboard)
 			})
 			pr.Route("/suppliers", func(sr chi.Router) {
 				sr.Get("/", suppliersH.List)

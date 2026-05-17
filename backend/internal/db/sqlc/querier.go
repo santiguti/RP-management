@@ -54,6 +54,12 @@ type Querier interface {
 	ListWorkOrderTransactions(ctx context.Context, workOrderID pgtype.Int8) ([]ListWorkOrderTransactionsRow, error)
 	ListWorkOrders(ctx context.Context, arg ListWorkOrdersParams) ([]ListWorkOrdersRow, error)
 	MarkRecurringExpenseGenerated(ctx context.Context, arg MarkRecurringExpenseGeneratedParams) error
+	ReportAgingReadyWorkOrders(ctx context.Context) ([]ReportAgingReadyWorkOrdersRow, error)
+	ReportBalance(ctx context.Context, arg ReportBalanceParams) (ReportBalanceRow, error)
+	ReportDashboardCounters(ctx context.Context) (ReportDashboardCountersRow, error)
+	ReportPnLByCategory(ctx context.Context, arg ReportPnLByCategoryParams) ([]ReportPnLByCategoryRow, error)
+	ReportTopClientsByRevenue(ctx context.Context) ([]ReportTopClientsByRevenueRow, error)
+	ReportWorkOrderCountsByStatus(ctx context.Context) ([]ReportWorkOrderCountsByStatusRow, error)
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
 	SearchDevices(ctx context.Context, arg SearchDevicesParams) ([]SearchDevicesRow, error)
 	SetWorkOrderFinals(ctx context.Context, arg SetWorkOrderFinalsParams) (WorkOrder, error)
