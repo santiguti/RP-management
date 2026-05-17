@@ -19,6 +19,7 @@ type Querier interface {
 	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateDeviceModel(ctx context.Context, arg CreateDeviceModelParams) (DeviceModel, error)
+	CreateRecurringExpense(ctx context.Context, arg CreateRecurringExpenseParams) (RecurringExpense, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
 	// Transaction financial identity is immutable after creation: transaction_type,
@@ -35,6 +36,7 @@ type Querier interface {
 	GetClientByUcode(ctx context.Context, ucode pgtype.UUID) (Client, error)
 	GetDeviceByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceByUcodeRow, error)
 	GetDeviceModelByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceModelByUcodeRow, error)
+	GetRecurringExpenseByUcode(ctx context.Context, ucode pgtype.UUID) (GetRecurringExpenseByUcodeRow, error)
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
 	GetSupplierByUcode(ctx context.Context, ucode pgtype.UUID) (Supplier, error)
 	GetTransactionByUcode(ctx context.Context, ucode pgtype.UUID) (GetTransactionByUcodeRow, error)
@@ -45,10 +47,13 @@ type Querier interface {
 	ListBrands(ctx context.Context) ([]Brand, error)
 	ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error)
 	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)
+	ListDueRecurringExpenses(ctx context.Context, dollar_1 pgtype.Date) ([]RecurringExpense, error)
+	ListRecurringExpenses(ctx context.Context) ([]ListRecurringExpensesRow, error)
 	ListSuppliers(ctx context.Context) ([]Supplier, error)
 	ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error)
 	ListWorkOrderTransactions(ctx context.Context, workOrderID pgtype.Int8) ([]ListWorkOrderTransactionsRow, error)
 	ListWorkOrders(ctx context.Context, arg ListWorkOrdersParams) ([]ListWorkOrdersRow, error)
+	MarkRecurringExpenseGenerated(ctx context.Context, arg MarkRecurringExpenseGeneratedParams) error
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
 	SearchDevices(ctx context.Context, arg SearchDevicesParams) ([]SearchDevicesRow, error)
 	SetWorkOrderFinals(ctx context.Context, arg SetWorkOrderFinalsParams) (WorkOrder, error)
@@ -59,6 +64,7 @@ type Querier interface {
 	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
 	SoftDeleteDevice(ctx context.Context, arg SoftDeleteDeviceParams) error
 	SoftDeleteDeviceModel(ctx context.Context, arg SoftDeleteDeviceModelParams) error
+	SoftDeleteRecurringExpense(ctx context.Context, arg SoftDeleteRecurringExpenseParams) error
 	SoftDeleteSupplier(ctx context.Context, arg SoftDeleteSupplierParams) error
 	SoftDeleteTransaction(ctx context.Context, arg SoftDeleteTransactionParams) error
 	SoftDeleteWorkOrder(ctx context.Context, arg SoftDeleteWorkOrderParams) error
@@ -68,6 +74,7 @@ type Querier interface {
 	UpdateClient(ctx context.Context, arg UpdateClientParams) (Client, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateDeviceModel(ctx context.Context, arg UpdateDeviceModelParams) (DeviceModel, error)
+	UpdateRecurringExpense(ctx context.Context, arg UpdateRecurringExpenseParams) (RecurringExpense, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
 	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error

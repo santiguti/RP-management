@@ -248,6 +248,7 @@ func testRouter(q *sqlc.Queries) http.Handler {
 	workOrdersH := NewWorkOrders(q)
 	suppliersH := NewSuppliers(q)
 	transactionsH := NewTransactions(q)
+	recurringH := NewRecurringExpenses(q)
 	brandsH := NewBrands(q)
 	modelsH := NewDeviceModels(q)
 	typesH := NewArticleTypes(q)
@@ -298,6 +299,17 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				tr.Get("/{ucode}", transactionsH.Get)
 				tr.Patch("/{ucode}", transactionsH.Update)
 				tr.Delete("/{ucode}", transactionsH.Delete)
+			})
+			pr.Route("/recurring-expenses", func(rr chi.Router) {
+				rr.Get("/", recurringH.List)
+				rr.Get("/{ucode}", recurringH.Get)
+				rr.Group(func(o chi.Router) {
+					o.Use(middleware.RequireRole("owner"))
+					o.Post("/", recurringH.Create)
+					o.Patch("/{ucode}", recurringH.Update)
+					o.Delete("/{ucode}", recurringH.Delete)
+					o.Post("/{ucode}/run-now", recurringH.RunNow)
+				})
 			})
 			pr.Route("/suppliers", func(sr chi.Router) {
 				sr.Get("/", suppliersH.List)
@@ -490,5 +502,8 @@ func uniqueUsername(t *testing.T) string {
 	t.Helper()
 
 	name := strings.NewReplacer("/", "_", " ", "_").Replace(strings.ToLower(t.Name()))
+	if len(name) > 40 {
+		name = name[:40]
+	}
 	return fmt.Sprintf("%s_%d", name, time.Now().UnixNano())
 }

@@ -25,6 +25,7 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 	workOrdersH := handlers.NewWorkOrders(queries)
 	suppliersH := handlers.NewSuppliers(queries)
 	transactionsH := handlers.NewTransactions(queries)
+	recurringH := handlers.NewRecurringExpenses(queries)
 	brandsH := handlers.NewBrands(queries)
 	modelsH := handlers.NewDeviceModels(queries)
 	typesH := handlers.NewArticleTypes(queries)
@@ -89,6 +90,17 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 				tr.Get("/{ucode}", transactionsH.Get)
 				tr.Patch("/{ucode}", transactionsH.Update)
 				tr.Delete("/{ucode}", transactionsH.Delete)
+			})
+			pr.Route("/recurring-expenses", func(rr chi.Router) {
+				rr.Get("/", recurringH.List)
+				rr.Get("/{ucode}", recurringH.Get)
+				rr.Group(func(o chi.Router) {
+					o.Use(middleware.RequireRole("owner"))
+					o.Post("/", recurringH.Create)
+					o.Patch("/{ucode}", recurringH.Update)
+					o.Delete("/{ucode}", recurringH.Delete)
+					o.Post("/{ucode}/run-now", recurringH.RunNow)
+				})
 			})
 			pr.Route("/suppliers", func(sr chi.Router) {
 				sr.Get("/", suppliersH.List)
