@@ -34,6 +34,18 @@ services:
       postgres:
         condition: service_healthy
 
+  # Prod-only by default (no live-reload). Dev uses `npm run dev` + Vite proxy.
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: rp_web
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+
 volumes:
   pgdata:
     name: rp_pgdata
