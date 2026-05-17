@@ -71,8 +71,17 @@ WHERE id = $1
   AND voided_ts IS NULL;
 
 -- name: ListClientDevices :many
-SELECT *
-FROM rp.devices
-WHERE client_id = $1
-  AND voided_ts IS NULL
-ORDER BY created_ts DESC;
+SELECT
+  sqlc.embed(d),
+  c.ucode  AS client_ucode,
+  b.ucode  AS brand_ucode,
+  dm.ucode AS model_ucode,
+  at.ucode AS article_type_ucode
+FROM rp.devices d
+JOIN rp.clients c ON c.id = d.client_id
+JOIN rp.brands b ON b.id = d.brand_id
+LEFT JOIN rp.device_models dm ON dm.id = d.model_id
+JOIN rp.article_types at ON at.id = d.article_type_id
+WHERE d.client_id = $1
+  AND d.voided_ts IS NULL
+ORDER BY d.created_ts DESC;

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -397,7 +398,7 @@ func toDeviceDTO(d sqlc.Device, clientUcode, brandUcode, modelUcode, articleType
 		SerialNumber:     stringPtrFromText(d.SerialNumber),
 		Color:            stringPtrFromText(d.Color),
 		Description:      stringPtrFromText(d.Description),
-		CreatedTs:        d.CreatedTs.Time.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedTs:        d.CreatedTs.Time.Format(time.RFC3339),
 	}
 }
 

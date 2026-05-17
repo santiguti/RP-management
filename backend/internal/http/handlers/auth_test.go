@@ -48,20 +48,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newTxQueries(t *testing.T) (*sqlc.Queries, func()) {
-	t.Helper()
-
-	tx, err := testPool.Begin(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	return sqlc.New(tx), func() { _ = tx.Rollback(context.Background()) }
-}
-
 func newPoolQueries(t *testing.T) (*sqlc.Queries, func()) {
 	t.Helper()
 
-	return sqlc.New(testPool), func() {}
+	resetTestDB(t)
+	return sqlc.New(testPool), func() { resetTestDB(t) }
 }
 
 func TestLogin_OK(t *testing.T) {

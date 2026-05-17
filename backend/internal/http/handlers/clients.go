@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
@@ -266,13 +267,7 @@ func (c *Clients) ListDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]deviceDTO, 0, len(rows))
 	for _, row := range rows {
-		detail, err := c.queries.GetDeviceByUcode(r.Context(), row.Ucode)
-		if err != nil {
-			log.Printf("get client device detail: %v", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-			return
-		}
-		out = append(out, toDeviceDTO(detail.Device, detail.ClientUcode, detail.BrandUcode, detail.ModelUcode, detail.ArticleTypeUcode))
+		out = append(out, toDeviceDTO(row.Device, row.ClientUcode, row.BrandUcode, row.ModelUcode, row.ArticleTypeUcode))
 	}
 	writeJSON(w, http.StatusOK, map[string][]deviceDTO{"devices": out})
 }
@@ -338,7 +333,7 @@ func toClientDTO(c sqlc.Client) clientDTO {
 		Address:    stringPtrFromText(c.Address),
 		Notes:      stringPtrFromText(c.Notes),
 		ClientType: c.ClientType,
-		CreatedTs:  c.CreatedTs.Time.Format("2006-01-02T15:04:05Z07:00"),
+		CreatedTs:  c.CreatedTs.Time.Format(time.RFC3339),
 	}
 }
 

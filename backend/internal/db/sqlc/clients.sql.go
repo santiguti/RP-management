@@ -146,36 +146,57 @@ func (q *Queries) GetClientByUcode(ctx context.Context, ucode pgtype.UUID) (Clie
 }
 
 const listClientDevices = `-- name: ListClientDevices :many
-SELECT id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, client_id, brand_id, model_id, article_type_id, serial_number, color, description
-FROM rp.devices
-WHERE client_id = $1
-  AND voided_ts IS NULL
-ORDER BY created_ts DESC
+SELECT
+  d.id, d.ucode, d.created_ts, d.created_by_user_id, d.voided_ts, d.voided_by_user_id, d.client_id, d.brand_id, d.model_id, d.article_type_id, d.serial_number, d.color, d.description,
+  c.ucode  AS client_ucode,
+  b.ucode  AS brand_ucode,
+  dm.ucode AS model_ucode,
+  at.ucode AS article_type_ucode
+FROM rp.devices d
+JOIN rp.clients c ON c.id = d.client_id
+JOIN rp.brands b ON b.id = d.brand_id
+LEFT JOIN rp.device_models dm ON dm.id = d.model_id
+JOIN rp.article_types at ON at.id = d.article_type_id
+WHERE d.client_id = $1
+  AND d.voided_ts IS NULL
+ORDER BY d.created_ts DESC
 `
 
-func (q *Queries) ListClientDevices(ctx context.Context, clientID int64) ([]Device, error) {
+type ListClientDevicesRow struct {
+	Device           Device      `json:"device"`
+	ClientUcode      pgtype.UUID `json:"client_ucode"`
+	BrandUcode       pgtype.UUID `json:"brand_ucode"`
+	ModelUcode       pgtype.UUID `json:"model_ucode"`
+	ArticleTypeUcode pgtype.UUID `json:"article_type_ucode"`
+}
+
+func (q *Queries) ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error) {
 	rows, err := q.db.Query(ctx, listClientDevices, clientID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Device{}
+	items := []ListClientDevicesRow{}
 	for rows.Next() {
-		var i Device
+		var i ListClientDevicesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Ucode,
-			&i.CreatedTs,
-			&i.CreatedByUserID,
-			&i.VoidedTs,
-			&i.VoidedByUserID,
-			&i.ClientID,
-			&i.BrandID,
-			&i.ModelID,
-			&i.ArticleTypeID,
-			&i.SerialNumber,
-			&i.Color,
-			&i.Description,
+			&i.Device.ID,
+			&i.Device.Ucode,
+			&i.Device.CreatedTs,
+			&i.Device.CreatedByUserID,
+			&i.Device.VoidedTs,
+			&i.Device.VoidedByUserID,
+			&i.Device.ClientID,
+			&i.Device.BrandID,
+			&i.Device.ModelID,
+			&i.Device.ArticleTypeID,
+			&i.Device.SerialNumber,
+			&i.Device.Color,
+			&i.Device.Description,
+			&i.ClientUcode,
+			&i.BrandUcode,
+			&i.ModelUcode,
+			&i.ArticleTypeUcode,
 		); err != nil {
 			return nil, err
 		}

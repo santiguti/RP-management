@@ -4,11 +4,8 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
-	"errors"
 	"log"
 	"net/http"
-
-	"github.com/jackc/pgx/v5"
 
 	"github.com/santiguti/rp-management/backend/internal/auth"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
@@ -38,14 +35,16 @@ func RequireSession(q *sqlc.Queries) func(http.Handler) http.Handler {
 
 			hash := auth.HashSessionToken(cookie.Value)
 			row, err := q.GetSessionWithUser(r.Context(), hash)
-			if errors.Is(err, pgx.ErrNoRows) || err != nil {
+			if err != nil {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthenticated"})
 				return
 			}
 
-			if err := q.TouchSession(context.Background(), hash); err != nil {
-				log.Printf("touch session: %v", err)
-			}
+			go func() {
+				if err := q.TouchSession(context.Background(), hash); err != nil {
+					log.Printf("touch session: %v", err)
+				}
+			}()
 
 			ctx := WithUser(r.Context(), &row.User)
 			next.ServeHTTP(w, r.WithContext(ctx))

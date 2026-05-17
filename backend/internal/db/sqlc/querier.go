@@ -32,7 +32,7 @@ type Querier interface {
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	ListArticleTypes(ctx context.Context) ([]ArticleType, error)
 	ListBrands(ctx context.Context) ([]Brand, error)
-	ListClientDevices(ctx context.Context, clientID int64) ([]Device, error)
+	ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error)
 	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
 	SearchDevices(ctx context.Context, arg SearchDevicesParams) ([]SearchDevicesRow, error)

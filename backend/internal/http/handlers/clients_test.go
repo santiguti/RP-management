@@ -309,6 +309,42 @@ func TestListClientDevices_Empty(t *testing.T) {
 	}
 }
 
+func TestListClientDevices_EnrichedNoN1(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	existing := seedClient(t, q, "Cliente Con Equipos", "")
+	brand := lookupBrandByName(t, q, "Samsung")
+	articleType := lookupArticleTypeByName(t, q, "celular")
+	for i := 0; i < 3; i++ {
+		seedDevice(t, q, existing.ID, brand.ID, pgtype.Int8{}, articleType.ID, fmt.Sprintf("NO-N1-%d", i))
+	}
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	res, err := client.Get(ts.URL + "/api/v1/clients/" + uuidString(existing.Ucode) + "/devices")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusOK, readBody(t, res))
+	}
+	var body struct {
+		Devices []deviceDTO `json:"devices"`
+	}
+	decodeJSON(t, res.Body, &body)
+	if len(body.Devices) != 3 {
+		t.Fatalf("len(devices) = %d, want 3", len(body.Devices))
+	}
+	for _, device := range body.Devices {
+		if device.Ucode == "" || device.BrandUcode == "" || device.ArticleTypeUcode == "" {
+			t.Fatalf("device missing enriched ucodes: %+v", device)
+		}
+	}
+}
+
 func seedClient(t *testing.T, q *sqlc.Queries, name, phone string) sqlc.Client {
 	t.Helper()
 
