@@ -253,6 +253,9 @@ func TestCSRF_RejectsWrongHeader(t *testing.T) {
 func testRouter(q *sqlc.Queries) http.Handler {
 	authH := NewAuth(q, config.Config{AppEnv: "dev"})
 	clientsH := NewClients(q)
+	brandsH := NewBrands(q)
+	modelsH := NewDeviceModels(q)
+	typesH := NewArticleTypes(q)
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Post("/auth/login", authH.Login)
@@ -261,6 +264,16 @@ func testRouter(q *sqlc.Queries) http.Handler {
 			pr.Use(middleware.CSRF)
 			pr.Post("/auth/logout", authH.Logout)
 			pr.Get("/auth/me", authH.Me)
+			pr.Route("/brands", func(br chi.Router) {
+				br.Get("/", brandsH.List)
+				br.Get("/{ucode}/models", modelsH.ListByBrand)
+				br.Group(func(o chi.Router) {
+					o.Use(middleware.RequireRole("owner"))
+					o.Post("/", brandsH.Create)
+					o.Patch("/{ucode}", brandsH.Update)
+					o.Delete("/{ucode}", brandsH.Delete)
+				})
+			})
 			pr.Route("/clients", func(cr chi.Router) {
 				cr.Post("/", clientsH.Create)
 				cr.Get("/", clientsH.Search)
@@ -268,6 +281,21 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				cr.Patch("/{ucode}", clientsH.Update)
 				cr.Delete("/{ucode}", clientsH.Delete)
 				cr.Get("/{ucode}/devices", clientsH.ListDevices)
+			})
+			pr.Route("/device-models", func(mr chi.Router) {
+				mr.Use(middleware.RequireRole("owner"))
+				mr.Post("/", modelsH.Create)
+				mr.Patch("/{ucode}", modelsH.Update)
+				mr.Delete("/{ucode}", modelsH.Delete)
+			})
+			pr.Route("/article-types", func(tr chi.Router) {
+				tr.Get("/", typesH.List)
+				tr.Group(func(o chi.Router) {
+					o.Use(middleware.RequireRole("owner"))
+					o.Post("/", typesH.Create)
+					o.Patch("/{ucode}", typesH.Update)
+					o.Delete("/{ucode}", typesH.Delete)
+				})
 			})
 		})
 	})

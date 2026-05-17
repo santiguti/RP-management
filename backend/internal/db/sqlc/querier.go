@@ -12,21 +12,36 @@ import (
 
 type Querier interface {
 	CountClients(ctx context.Context, q_ string) (int64, error)
+	CreateArticleType(ctx context.Context, arg CreateArticleTypeParams) (ArticleType, error)
+	CreateBrand(ctx context.Context, arg CreateBrandParams) (Brand, error)
 	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
+	CreateDeviceModel(ctx context.Context, arg CreateDeviceModelParams) (DeviceModel, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteSession(ctx context.Context, id []byte) error
+	GetArticleTypeByUcode(ctx context.Context, ucode pgtype.UUID) (ArticleType, error)
+	GetBrandByUcode(ctx context.Context, ucode pgtype.UUID) (Brand, error)
 	GetClientByPhone(ctx context.Context, phone pgtype.Text) (Client, error)
 	GetClientByUcode(ctx context.Context, ucode pgtype.UUID) (Client, error)
+	GetDeviceModelByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceModelByUcodeRow, error)
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	ListArticleTypes(ctx context.Context) ([]ArticleType, error)
+	ListBrands(ctx context.Context) ([]Brand, error)
 	ListClientDevices(ctx context.Context, clientID int64) ([]Device, error)
+	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
+	SoftDeleteArticleType(ctx context.Context, arg SoftDeleteArticleTypeParams) error
+	SoftDeleteBrand(ctx context.Context, arg SoftDeleteBrandParams) error
 	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
+	SoftDeleteDeviceModel(ctx context.Context, arg SoftDeleteDeviceModelParams) error
 	TouchSession(ctx context.Context, id []byte) error
+	UpdateArticleType(ctx context.Context, arg UpdateArticleTypeParams) (ArticleType, error)
+	UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand, error)
 	UpdateClient(ctx context.Context, arg UpdateClientParams) (Client, error)
+	UpdateDeviceModel(ctx context.Context, arg UpdateDeviceModelParams) (DeviceModel, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error
 }
 
