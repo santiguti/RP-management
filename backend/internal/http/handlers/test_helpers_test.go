@@ -20,6 +20,9 @@ func resetTestDB(t *testing.T) {
 	_, err := testPool.Exec(context.Background(), `
 TRUNCATE
   rp.sessions,
+  rp.transactions,
+  rp.recurring_expenses,
+  rp.suppliers,
   rp.work_orders,
   rp.wo_number_counters,
   rp.devices,

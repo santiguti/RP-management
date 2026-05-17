@@ -74,6 +74,25 @@ type DeviceModel struct {
 	Name            string             `json:"name"`
 }
 
+type RecurringExpense struct {
+	ID                int64              `json:"id"`
+	Ucode             pgtype.UUID        `json:"ucode"`
+	CreatedTs         pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID   pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs          pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID    pgtype.Int8        `json:"voided_by_user_id"`
+	Name              string             `json:"name"`
+	Amount            pgtype.Numeric     `json:"amount"`
+	Currency          string             `json:"currency"`
+	DayOfMonth        int32              `json:"day_of_month"`
+	Category          string             `json:"category"`
+	PaymentMethod     string             `json:"payment_method"`
+	SupplierID        pgtype.Int8        `json:"supplier_id"`
+	Description       pgtype.Text        `json:"description"`
+	Active            bool               `json:"active"`
+	LastGeneratedDate pgtype.Date        `json:"last_generated_date"`
+}
+
 type Session struct {
 	ID         []byte             `json:"id"`
 	UserID     int64              `json:"user_id"`
@@ -82,6 +101,41 @@ type Session struct {
 	Ip         *netip.Addr        `json:"ip"`
 	UserAgent  pgtype.Text        `json:"user_agent"`
 	CreatedTs  pgtype.Timestamptz `json:"created_ts"`
+}
+
+type Supplier struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	Name            string             `json:"name"`
+	Phone           pgtype.Text        `json:"phone"`
+	Email           pgtype.Text        `json:"email"`
+	Notes           pgtype.Text        `json:"notes"`
+}
+
+type Transaction struct {
+	ID                 int64              `json:"id"`
+	Ucode              pgtype.UUID        `json:"ucode"`
+	CreatedTs          pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID    pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs           pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID     pgtype.Int8        `json:"voided_by_user_id"`
+	TransactionType    string             `json:"transaction_type"`
+	Amount             pgtype.Numeric     `json:"amount"`
+	Currency           string             `json:"currency"`
+	FxRateToArs        pgtype.Numeric     `json:"fx_rate_to_ars"`
+	TransactionDate    pgtype.Date        `json:"transaction_date"`
+	PaymentMethod      string             `json:"payment_method"`
+	Category           string             `json:"category"`
+	CounterpartyType   string             `json:"counterparty_type"`
+	ClientID           pgtype.Int8        `json:"client_id"`
+	SupplierID         pgtype.Int8        `json:"supplier_id"`
+	WorkOrderID        pgtype.Int8        `json:"work_order_id"`
+	Description        pgtype.Text        `json:"description"`
+	RecurringExpenseID pgtype.Int8        `json:"recurring_expense_id"`
 }
 
 type User struct {

@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CountClients(ctx context.Context, q_ string) (int64, error)
+	CountTransactions(ctx context.Context, arg CountTransactionsParams) (int64, error)
 	CountWorkOrders(ctx context.Context, arg CountWorkOrdersParams) (int64, error)
 	CreateArticleType(ctx context.Context, arg CreateArticleTypeParams) (ArticleType, error)
 	CreateBrand(ctx context.Context, arg CreateBrandParams) (Brand, error)
@@ -19,6 +20,11 @@ type Querier interface {
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateDeviceModel(ctx context.Context, arg CreateDeviceModelParams) (DeviceModel, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
+	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
+	// Transaction financial identity is immutable after creation: transaction_type,
+	// amount, currency, counterparty_type, and relation FKs are not patched. If one
+	// of those is wrong, soft-delete the row and create a replacement.
+	CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkOrder(ctx context.Context, arg CreateWorkOrderParams) (WorkOrder, error)
 	DeleteExpiredSessions(ctx context.Context) error
@@ -30,6 +36,8 @@ type Querier interface {
 	GetDeviceByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceByUcodeRow, error)
 	GetDeviceModelByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceModelByUcodeRow, error)
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
+	GetSupplierByUcode(ctx context.Context, ucode pgtype.UUID) (Supplier, error)
+	GetTransactionByUcode(ctx context.Context, ucode pgtype.UUID) (GetTransactionByUcodeRow, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetWorkOrderByUcode(ctx context.Context, ucode pgtype.UUID) (GetWorkOrderByUcodeRow, error)
@@ -37,6 +45,9 @@ type Querier interface {
 	ListBrands(ctx context.Context) ([]Brand, error)
 	ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error)
 	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)
+	ListSuppliers(ctx context.Context) ([]Supplier, error)
+	ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error)
+	ListWorkOrderTransactions(ctx context.Context, workOrderID pgtype.Int8) ([]ListWorkOrderTransactionsRow, error)
 	ListWorkOrders(ctx context.Context, arg ListWorkOrdersParams) ([]ListWorkOrdersRow, error)
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
 	SearchDevices(ctx context.Context, arg SearchDevicesParams) ([]SearchDevicesRow, error)
@@ -48,6 +59,8 @@ type Querier interface {
 	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
 	SoftDeleteDevice(ctx context.Context, arg SoftDeleteDeviceParams) error
 	SoftDeleteDeviceModel(ctx context.Context, arg SoftDeleteDeviceModelParams) error
+	SoftDeleteSupplier(ctx context.Context, arg SoftDeleteSupplierParams) error
+	SoftDeleteTransaction(ctx context.Context, arg SoftDeleteTransactionParams) error
 	SoftDeleteWorkOrder(ctx context.Context, arg SoftDeleteWorkOrderParams) error
 	TouchSession(ctx context.Context, id []byte) error
 	UpdateArticleType(ctx context.Context, arg UpdateArticleTypeParams) (ArticleType, error)
@@ -55,6 +68,8 @@ type Querier interface {
 	UpdateClient(ctx context.Context, arg UpdateClientParams) (Client, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateDeviceModel(ctx context.Context, arg UpdateDeviceModelParams) (DeviceModel, error)
+	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
+	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error
 	UpdateWorkOrderFields(ctx context.Context, arg UpdateWorkOrderFieldsParams) (WorkOrder, error)
 	UpdateWorkOrderStatus(ctx context.Context, arg UpdateWorkOrderStatusParams) (WorkOrder, error)

@@ -26,3 +26,6 @@ sql:
           rp_device: "Device"
           rp_wo_number_counter: "WoNumberCounter"
           rp_work_order: "WorkOrder"
+          rp_supplier: "Supplier"
+          rp_transaction: "Transaction"
+          rp_recurring_expense: "RecurringExpense"
