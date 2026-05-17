@@ -34,6 +34,9 @@ export function AppLayout() {
           <NavLink to="/clients" className={linkClass}>
             Clientes
           </NavLink>
+          <NavLink to="/work-orders" className={linkClass}>
+            Órdenes de trabajo
+          </NavLink>
           {user?.role === "owner" ? (
             <NavLink to="/settings/lookups" className={linkClass}>
               Ajustes

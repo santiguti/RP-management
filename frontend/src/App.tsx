@@ -10,6 +10,8 @@ import { ClientsListPage } from "@/pages/clients/list"
 import { ClientDetailPage } from "@/pages/clients/detail"
 import { RequireOwner } from "@/components/require-owner"
 import { LookupsPage } from "@/pages/settings/lookups"
+import { IntakeWorkOrderPage } from "@/pages/work-orders/intake"
+import { WorkOrderDetailPlaceholder, WorkOrdersListPlaceholder } from "@/pages/work-orders/placeholders"
 
 const qc = new QueryClient()
 
@@ -23,6 +25,9 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="clients" element={<ClientsListPage />} />
             <Route path="clients/:ucode" element={<ClientDetailPage />} />
+            <Route path="work-orders" element={<WorkOrdersListPlaceholder />} />
+            <Route path="work-orders/new" element={<IntakeWorkOrderPage />} />
+            <Route path="work-orders/:ucode" element={<WorkOrderDetailPlaceholder />} />
             <Route
               path="settings/lookups"
               element={

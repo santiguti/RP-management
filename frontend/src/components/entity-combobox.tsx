@@ -24,6 +24,9 @@ type EntityComboboxProps<T> = {
   getLabel: (option: T) => string
   placeholder?: string
   emptyMessage?: string
+  disabled?: boolean
+  actionLabel?: string
+  onAction?: () => void
 }
 
 export function EntityCombobox<T>({
@@ -35,6 +38,9 @@ export function EntityCombobox<T>({
   getLabel,
   placeholder = "Seleccionar...",
   emptyMessage = "Sin opciones",
+  disabled = false,
+  actionLabel,
+  onAction,
 }: EntityComboboxProps<T>) {
   const [open, setOpen] = React.useState(false)
   const [q, setQ] = React.useState("")
@@ -61,6 +67,7 @@ export function EntityCombobox<T>({
           role="combobox"
           aria-expanded={open}
           className="w-full justify-between"
+          disabled={disabled}
         >
           <span className={cn("truncate", !selectedLabel && "text-muted-foreground")}>
             {selectedLabel || placeholder}
@@ -74,6 +81,17 @@ export function EntityCombobox<T>({
           <CommandList>
             <CommandEmpty>{isFetching ? "Buscando..." : emptyMessage}</CommandEmpty>
             <CommandGroup>
+              {actionLabel && onAction ? (
+                <CommandItem
+                  value="__action__"
+                  onSelect={() => {
+                    onAction()
+                    setOpen(false)
+                  }}
+                >
+                  {actionLabel}
+                </CommandItem>
+              ) : null}
               {value ? (
                 <CommandItem
                   value="__clear__"
