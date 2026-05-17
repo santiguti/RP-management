@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	recurringdomain "github.com/santiguti/rp-management/backend/internal/domain/recurring"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
 
@@ -275,57 +276,20 @@ func (re *RecurringExpenses) RunNow(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	due := recurringDueDate(time.Now().UTC(), int(current.recurringExpense.DayOfMonth))
-	dueDate := pgtype.Date{Time: due, Valid: true}
-	if !shouldGenerateRecurring(due, current.recurringExpense.LastGeneratedDate) {
+	result, err := recurringdomain.ProcessOne(r.Context(), re.queries, current.recurringExpense, time.Now().UTC())
+	if err != nil {
+		log.Printf("run recurring expense now: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if !result.Generated {
 		writeJSON(rw, http.StatusOK, map[string]any{
 			"transaction": nil,
-			"reason":      "already_generated_for_due_date",
+			"reason":      result.Reason,
 		})
 		return
 	}
-
-	fxRate, err := stringToNumeric("1")
-	if err != nil {
-		log.Printf("parse recurring fx rate: %v", err)
-		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
-	counterpartyType := "none"
-	if current.recurringExpense.SupplierID.Valid {
-		counterpartyType = "supplier"
-	}
-	description := current.recurringExpense.Description
-	if !description.Valid {
-		description = pgtype.Text{String: current.recurringExpense.Name, Valid: true}
-	}
-	tx, err := re.queries.CreateTransaction(r.Context(), sqlc.CreateTransactionParams{
-		TransactionType:    "expense",
-		Amount:             current.recurringExpense.Amount,
-		Currency:           current.recurringExpense.Currency,
-		FxRateToArs:        fxRate,
-		TransactionDate:    dueDate,
-		PaymentMethod:      current.recurringExpense.PaymentMethod,
-		Category:           current.recurringExpense.Category,
-		CounterpartyType:   counterpartyType,
-		SupplierID:         current.recurringExpense.SupplierID,
-		Description:        description,
-		RecurringExpenseID: pgtype.Int8{Int64: current.recurringExpense.ID, Valid: true},
-	})
-	if err != nil {
-		log.Printf("create recurring transaction: %v", err)
-		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
-	if err := re.queries.MarkRecurringExpenseGenerated(r.Context(), sqlc.MarkRecurringExpenseGeneratedParams{
-		ID:                current.recurringExpense.ID,
-		LastGeneratedDate: dueDate,
-	}); err != nil {
-		log.Printf("mark recurring generated: %v", err)
-		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
-	row, err := re.queries.GetTransactionByUcode(r.Context(), tx.Ucode)
+	row, err := re.queries.GetTransactionByUcode(r.Context(), result.Transaction.Ucode)
 	if err != nil {
 		log.Printf("get recurring transaction: %v", err)
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
@@ -401,21 +365,6 @@ func enrichedFromListRecurring(row sqlc.ListRecurringExpensesRow) recurringExpen
 		supplierUcode:    row.SupplierUcode,
 		supplierName:     row.SupplierName,
 	}
-}
-
-func recurringDueDate(today time.Time, dayOfMonth int) time.Time {
-	base := time.Date(today.Year(), today.Month(), dayOfMonth, 0, 0, 0, 0, time.UTC)
-	if today.Day() >= dayOfMonth {
-		return base
-	}
-	return base.AddDate(0, -1, 0)
-}
-
-func shouldGenerateRecurring(due time.Time, lastGenerated pgtype.Date) bool {
-	if !lastGenerated.Valid {
-		return true
-	}
-	return lastGenerated.Time.Before(due)
 }
 
 func dateStringPtr(d pgtype.Date) *string {
