@@ -22,6 +22,7 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 	authH := handlers.NewAuth(queries, cfg)
 	clientsH := handlers.NewClients(queries)
 	devicesH := handlers.NewDevices(queries)
+	workOrdersH := handlers.NewWorkOrders(queries)
 	brandsH := handlers.NewBrands(queries)
 	modelsH := handlers.NewDeviceModels(queries)
 	typesH := handlers.NewArticleTypes(queries)
@@ -71,6 +72,11 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 				dr.Get("/{ucode}", devicesH.Get)
 				dr.Patch("/{ucode}", devicesH.Update)
 				dr.Delete("/{ucode}", devicesH.Delete)
+			})
+			pr.Route("/work-orders", func(wr chi.Router) {
+				wr.Post("/", workOrdersH.Intake)
+				wr.Get("/", workOrdersH.Search)
+				wr.Get("/{ucode}", workOrdersH.Get)
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))
