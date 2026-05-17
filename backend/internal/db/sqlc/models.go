@@ -10,6 +10,70 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type ArticleType struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	Name            string             `json:"name"`
+}
+
+type Brand struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	Name            string             `json:"name"`
+}
+
+type Client struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	Name            string             `json:"name"`
+	Phone           pgtype.Text        `json:"phone"`
+	Email           pgtype.Text        `json:"email"`
+	DniCuit         pgtype.Text        `json:"dni_cuit"`
+	Address         pgtype.Text        `json:"address"`
+	Notes           pgtype.Text        `json:"notes"`
+	ClientType      string             `json:"client_type"`
+	Search          interface{}        `json:"search"`
+}
+
+type Device struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	ClientID        int64              `json:"client_id"`
+	BrandID         int64              `json:"brand_id"`
+	ModelID         pgtype.Int8        `json:"model_id"`
+	ArticleTypeID   int64              `json:"article_type_id"`
+	SerialNumber    pgtype.Text        `json:"serial_number"`
+	Color           pgtype.Text        `json:"color"`
+	Description     pgtype.Text        `json:"description"`
+}
+
+type DeviceModel struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	BrandID         int64              `json:"brand_id"`
+	Name            string             `json:"name"`
+}
+
 type Session struct {
 	ID         []byte             `json:"id"`
 	UserID     int64              `json:"user_id"`

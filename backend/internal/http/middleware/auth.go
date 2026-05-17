@@ -43,11 +43,9 @@ func RequireSession(q *sqlc.Queries) func(http.Handler) http.Handler {
 				return
 			}
 
-			go func() {
-				if err := q.TouchSession(context.Background(), hash); err != nil {
-					log.Printf("touch session: %v", err)
-				}
-			}()
+			if err := q.TouchSession(context.Background(), hash); err != nil {
+				log.Printf("touch session: %v", err)
+			}
 
 			ctx := WithUser(r.Context(), &row.User)
 			next.ServeHTTP(w, r.WithContext(ctx))

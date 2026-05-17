@@ -246,6 +246,7 @@ func TestCSRF_RejectsWrongHeader(t *testing.T) {
 
 func testRouter(q *sqlc.Queries) http.Handler {
 	authH := NewAuth(q, config.Config{AppEnv: "dev"})
+	clientsH := NewClients(q)
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Post("/auth/login", authH.Login)
@@ -254,6 +255,14 @@ func testRouter(q *sqlc.Queries) http.Handler {
 			pr.Use(middleware.CSRF)
 			pr.Post("/auth/logout", authH.Logout)
 			pr.Get("/auth/me", authH.Me)
+			pr.Route("/clients", func(cr chi.Router) {
+				cr.Post("/", clientsH.Create)
+				cr.Get("/", clientsH.Search)
+				cr.Get("/{ucode}", clientsH.Get)
+				cr.Patch("/{ucode}", clientsH.Update)
+				cr.Delete("/{ucode}", clientsH.Delete)
+				cr.Get("/{ucode}/devices", clientsH.ListDevices)
+			})
 		})
 	})
 	return r

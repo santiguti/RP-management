@@ -6,17 +6,27 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	CountClients(ctx context.Context, q_ string) (int64, error)
+	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteSession(ctx context.Context, id []byte) error
+	GetClientByPhone(ctx context.Context, phone pgtype.Text) (Client, error)
+	GetClientByUcode(ctx context.Context, ucode pgtype.UUID) (Client, error)
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
+	ListClientDevices(ctx context.Context, clientID int64) ([]Device, error)
+	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
+	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
 	TouchSession(ctx context.Context, id []byte) error
+	UpdateClient(ctx context.Context, arg UpdateClientParams) (Client, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error
 }
 

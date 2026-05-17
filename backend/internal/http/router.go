@@ -20,6 +20,7 @@ import (
 func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 	queries := sqlc.New(pool)
 	authH := handlers.NewAuth(queries, cfg)
+	clientsH := handlers.NewClients(queries)
 
 	r := chi.NewRouter()
 
@@ -42,6 +43,14 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 			pr.Use(middleware.CSRF)
 			pr.Post("/auth/logout", authH.Logout)
 			pr.Get("/auth/me", authH.Me)
+			pr.Route("/clients", func(cr chi.Router) {
+				cr.Post("/", clientsH.Create)
+				cr.Get("/", clientsH.Search)
+				cr.Get("/{ucode}", clientsH.Get)
+				cr.Patch("/{ucode}", clientsH.Update)
+				cr.Delete("/{ucode}", clientsH.Delete)
+				cr.Get("/{ucode}/devices", clientsH.ListDevices)
+			})
 		})
 	})
 

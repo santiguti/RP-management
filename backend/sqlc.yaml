@@ -19,3 +19,8 @@ sql:
         rename:
           rp_user: "User"
           rp_session: "Session"
+          rp_client: "Client"
+          rp_brand: "Brand"
+          rp_device_model: "DeviceModel"
+          rp_article_type: "ArticleType"
+          rp_device: "Device"

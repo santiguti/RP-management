@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -128,9 +127,8 @@ func (a *Auth) Me(w http.ResponseWriter, r *http.Request) {
 }
 
 func toUserDTO(u sqlc.User) userDTO {
-	b := u.Ucode.Bytes
 	return userDTO{
-		Ucode:    fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]),
+		Ucode:    uuidString(u.Ucode),
 		Username: u.Username,
 		FullName: u.FullName,
 		Role:     u.Role,
