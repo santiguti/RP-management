@@ -8,6 +8,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.2
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/joho/godotenv v1.5.1
+	github.com/nyaruka/phonenumbers v1.7.4
 	golang.org/x/crypto v0.51.0
 )
 
