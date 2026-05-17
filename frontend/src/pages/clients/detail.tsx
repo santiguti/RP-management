@@ -90,9 +90,13 @@ export function ClientDetailPage() {
   }
 
   const onCreateDevice = async (input: Parameters<typeof createDevice.mutateAsync>[0]) => {
-    await createDevice.mutateAsync(input)
-    toast.success("Dispositivo creado")
-    setDeviceOpen(false)
+    try {
+      await createDevice.mutateAsync(input)
+      toast.success("Dispositivo creado")
+      setDeviceOpen(false)
+    } catch {
+      toast.error("No se pudo guardar el dispositivo")
+    }
   }
 
   return (

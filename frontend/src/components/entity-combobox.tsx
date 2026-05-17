@@ -16,6 +16,7 @@ import { useDebounce } from "@/hooks/use-debounce"
 import { cn } from "@/lib/utils"
 
 type EntityComboboxProps<T> = {
+  queryKey: readonly unknown[]
   value: string | null
   onChange: (ucode: string | null) => void
   fetchOptions: (q: string) => Promise<T[]>
@@ -26,6 +27,7 @@ type EntityComboboxProps<T> = {
 }
 
 export function EntityCombobox<T>({
+  queryKey,
   value,
   onChange,
   fetchOptions,
@@ -39,7 +41,7 @@ export function EntityCombobox<T>({
   const debouncedQ = useDebounce(q, 250)
 
   const { data = [], isFetching } = useQuery({
-    queryKey: ["entity-combobox", debouncedQ, fetchOptions],
+    queryKey: ["entity-combobox", ...queryKey, debouncedQ],
     queryFn: () => fetchOptions(debouncedQ),
     placeholderData: keepPreviousData,
   })
