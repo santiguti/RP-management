@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/santiguti/rp-management/backend/internal/config"
+	"github.com/santiguti/rp-management/backend/internal/db"
 	apphttp "github.com/santiguti/rp-management/backend/internal/http"
 )
 
@@ -20,9 +21,18 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("db: %v", err)
+	}
+	defer pool.Close()
+
 	srv := &stdhttp.Server{
 		Addr:         cfg.HTTPAddr,
-		Handler:      apphttp.New(cfg),
+		Handler:      apphttp.New(cfg, pool),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -40,9 +50,9 @@ func main() {
 	<-stop
 
 	log.Print("shutting down")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown: %v", err)
 	}
 	log.Print("bye")

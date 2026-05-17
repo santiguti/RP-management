@@ -1,0 +1,21 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "internal/db/queries"
+    schema: "internal/db/migrations"
+    gen:
+      go:
+        package: "sqlc"
+        sql_package: "pgx/v5"
+        out: "internal/db/sqlc"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: false
+        # Drop the schema name from generated struct names: `rp_users` -> `User`
+        # instead of `RpUser`. Keys match sqlc's pre-CamelCase form
+        # ({schema}_{table_singular}).
+        rename:
+          rp_user: "User"
+          rp_session: "Session"
