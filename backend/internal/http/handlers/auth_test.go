@@ -58,8 +58,14 @@ func newTxQueries(t *testing.T) (*sqlc.Queries, func()) {
 	return sqlc.New(tx), func() { _ = tx.Rollback(context.Background()) }
 }
 
+func newPoolQueries(t *testing.T) (*sqlc.Queries, func()) {
+	t.Helper()
+
+	return sqlc.New(testPool), func() {}
+}
+
 func TestLogin_OK(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	user := seedOwner(t, q)
 
@@ -105,7 +111,7 @@ func TestLogin_OK(t *testing.T) {
 }
 
 func TestLogin_BadPassword(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	user := seedOwner(t, q)
 
@@ -125,7 +131,7 @@ func TestLogin_BadPassword(t *testing.T) {
 }
 
 func TestLogin_MissingUser(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	_ = seedOwner(t, q)
 
@@ -145,7 +151,7 @@ func TestLogin_MissingUser(t *testing.T) {
 }
 
 func TestMe_RequiresAuth(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 
 	ts := httptest.NewServer(testRouter(q))
@@ -161,7 +167,7 @@ func TestMe_RequiresAuth(t *testing.T) {
 }
 
 func TestMe_OK(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	user := seedOwner(t, q)
 
@@ -189,7 +195,7 @@ func TestMe_OK(t *testing.T) {
 }
 
 func TestLogout_OK(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	user := seedOwner(t, q)
 
@@ -215,7 +221,7 @@ func TestLogout_OK(t *testing.T) {
 }
 
 func TestCSRF_RejectsMissingHeader(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	user := seedOwner(t, q)
 
@@ -230,7 +236,7 @@ func TestCSRF_RejectsMissingHeader(t *testing.T) {
 }
 
 func TestCSRF_RejectsWrongHeader(t *testing.T) {
-	q, cleanup := newTxQueries(t)
+	q, cleanup := newPoolQueries(t)
 	defer cleanup()
 	user := seedOwner(t, q)
 
@@ -285,6 +291,9 @@ func seedOwner(t *testing.T, q *sqlc.Queries) sqlc.User {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		_, _ = testPool.Exec(context.Background(), `DELETE FROM rp.users WHERE id = $1`, user.ID)
+	})
 	return user
 }
 
