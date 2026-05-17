@@ -12,7 +12,7 @@ import { RequireOwner } from "@/components/require-owner"
 import { LookupsPage } from "@/pages/settings/lookups"
 import { IntakeWorkOrderPage } from "@/pages/work-orders/intake"
 import { WorkOrdersListPage } from "@/pages/work-orders/list"
-import { WorkOrderDetailPlaceholder } from "@/pages/work-orders/placeholders"
+import { WorkOrderDetailPage } from "@/pages/work-orders/detail"
 
 const qc = new QueryClient()
 
@@ -28,7 +28,7 @@ export default function App() {
             <Route path="clients/:ucode" element={<ClientDetailPage />} />
             <Route path="work-orders" element={<WorkOrdersListPage />} />
             <Route path="work-orders/new" element={<IntakeWorkOrderPage />} />
-            <Route path="work-orders/:ucode" element={<WorkOrderDetailPlaceholder />} />
+            <Route path="work-orders/:ucode" element={<WorkOrderDetailPage />} />
             <Route
               path="settings/lookups"
               element={
