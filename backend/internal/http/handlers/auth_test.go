@@ -253,6 +253,7 @@ func TestCSRF_RejectsWrongHeader(t *testing.T) {
 func testRouter(q *sqlc.Queries) http.Handler {
 	authH := NewAuth(q, config.Config{AppEnv: "dev"})
 	clientsH := NewClients(q)
+	devicesH := NewDevices(q)
 	brandsH := NewBrands(q)
 	modelsH := NewDeviceModels(q)
 	typesH := NewArticleTypes(q)
@@ -281,6 +282,13 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				cr.Patch("/{ucode}", clientsH.Update)
 				cr.Delete("/{ucode}", clientsH.Delete)
 				cr.Get("/{ucode}/devices", clientsH.ListDevices)
+			})
+			pr.Route("/devices", func(dr chi.Router) {
+				dr.Post("/", devicesH.Create)
+				dr.Get("/", devicesH.Search)
+				dr.Get("/{ucode}", devicesH.Get)
+				dr.Patch("/{ucode}", devicesH.Update)
+				dr.Delete("/{ucode}", devicesH.Delete)
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))

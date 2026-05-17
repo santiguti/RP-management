@@ -51,18 +51,6 @@ type updateClientReq struct {
 	ClientType *string `json:"client_type" validate:"omitempty,oneof=particular empresa"`
 }
 
-type deviceDTO struct {
-	Ucode         string  `json:"ucode"`
-	ClientID      int64   `json:"client_id"`
-	BrandID       int64   `json:"brand_id"`
-	ModelID       *int64  `json:"model_id,omitempty"`
-	ArticleTypeID int64   `json:"article_type_id"`
-	SerialNumber  *string `json:"serial_number,omitempty"`
-	Color         *string `json:"color,omitempty"`
-	Description   *string `json:"description,omitempty"`
-	CreatedTs     string  `json:"created_ts"`
-}
-
 type Clients struct {
 	queries *sqlc.Queries
 	val     *validator.Validate
@@ -278,7 +266,13 @@ func (c *Clients) ListDevices(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]deviceDTO, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, toDeviceDTO(row))
+		detail, err := c.queries.GetDeviceByUcode(r.Context(), row.Ucode)
+		if err != nil {
+			log.Printf("get client device detail: %v", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+			return
+		}
+		out = append(out, toDeviceDTO(detail.Device, detail.ClientUcode, detail.BrandUcode, detail.ModelUcode, detail.ArticleTypeUcode))
 	}
 	writeJSON(w, http.StatusOK, map[string][]deviceDTO{"devices": out})
 }
@@ -348,20 +342,6 @@ func toClientDTO(c sqlc.Client) clientDTO {
 	}
 }
 
-func toDeviceDTO(d sqlc.Device) deviceDTO {
-	return deviceDTO{
-		Ucode:         uuidString(d.Ucode),
-		ClientID:      d.ClientID,
-		BrandID:       d.BrandID,
-		ModelID:       int64PtrFromInt8(d.ModelID),
-		ArticleTypeID: d.ArticleTypeID,
-		SerialNumber:  stringPtrFromText(d.SerialNumber),
-		Color:         stringPtrFromText(d.Color),
-		Description:   stringPtrFromText(d.Description),
-		CreatedTs:     d.CreatedTs.Time.Format("2006-01-02T15:04:05Z07:00"),
-	}
-}
-
 func uuidString(u pgtype.UUID) string {
 	b := u.Bytes
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
@@ -380,13 +360,6 @@ func stringPtrFromText(value pgtype.Text) *string {
 		return nil
 	}
 	return &value.String
-}
-
-func int64PtrFromInt8(value pgtype.Int8) *int64 {
-	if !value.Valid {
-		return nil
-	}
-	return &value.Int64
 }
 
 func parsePositiveInt(raw string, fallback int) int {
