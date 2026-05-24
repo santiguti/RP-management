@@ -13,6 +13,8 @@ import { LookupsPage } from "@/pages/settings/lookups"
 import { IntakeWorkOrderPage } from "@/pages/work-orders/intake"
 import { WorkOrdersListPage } from "@/pages/work-orders/list"
 import { WorkOrderDetailPage } from "@/pages/work-orders/detail"
+import { TransactionsListPage } from "@/pages/transactions/list"
+import { SuppliersListPage } from "@/pages/suppliers/list"
 
 const qc = new QueryClient()
 
@@ -29,6 +31,8 @@ export default function App() {
             <Route path="work-orders" element={<WorkOrdersListPage />} />
             <Route path="work-orders/new" element={<IntakeWorkOrderPage />} />
             <Route path="work-orders/:ucode" element={<WorkOrderDetailPage />} />
+            <Route path="transactions" element={<TransactionsListPage />} />
+            <Route path="suppliers" element={<SuppliersListPage />} />
             <Route
               path="settings/lookups"
               element={

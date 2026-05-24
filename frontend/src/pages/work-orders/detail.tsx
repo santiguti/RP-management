@@ -1,13 +1,15 @@
 import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import { AxiosError } from "axios"
-import { Eye, EyeOff, Pencil } from "lucide-react"
+import { Eye, EyeOff, Pencil, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useQueryClient } from "@tanstack/react-query"
 
 import type { TransitionInput, UpdateWorkOrderInput, WorkOrder, WoEvent } from "@/api/work-orders"
+import type { Transaction, TransactionInput, UpdateTransactionInput } from "@/api/transactions"
 import { WoStatusBadge } from "@/components/wo-status-badge"
 import { FormDialog } from "@/components/form-dialog"
+import { DataTable, type Column } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -21,9 +23,17 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { useTransitionWorkOrder, useUpdateWorkOrder, useWorkOrder } from "@/hooks/use-work-orders"
+import {
+  useCreateTransaction,
+  useDeleteTransaction,
+  useUpdateTransaction,
+  useWorkOrderTransactions,
+} from "@/hooks/use-transactions"
+import { categoryLabels, formatARS, formatDateOnly } from "@/lib/money"
 import { CancelDialog } from "@/pages/work-orders/cancel-dialog"
 import { QuoteDialog } from "@/pages/work-orders/quote-dialog"
 import { ReadyDialog } from "@/pages/work-orders/ready-dialog"
+import { TransactionForm, showTransactionError } from "@/pages/transactions/transaction-form"
 
 const eventLabels: Record<WoEvent, string> = {
   start_diagnosis: "Iniciar diagnóstico",
@@ -132,7 +142,7 @@ export function WorkOrderDetailPage() {
           <PlaceholderCard text="Disponible a partir del Milestone 5" />
         </TabsContent>
         <TabsContent value="payments">
-          <PlaceholderCard text="Disponible a partir del Milestone 4" />
+          <PaymentsCard wo={wo} />
         </TabsContent>
       </Tabs>
 
@@ -164,6 +174,134 @@ export function WorkOrderDetailPage() {
         isSubmitting={transition.isPending}
       />
     </div>
+  )
+}
+
+function PaymentsCard({ wo }: { wo: WorkOrder }) {
+  const transactions = useWorkOrderTransactions(wo.ucode)
+  const createTransaction = useCreateTransaction()
+  const updateTransaction = useUpdateTransaction()
+  const deleteTransaction = useDeleteTransaction()
+  const [createOpen, setCreateOpen] = useState(false)
+  const [selected, setSelected] = useState<Transaction | undefined>()
+
+  const columns: Column<Transaction>[] = [
+    { header: "Fecha", cell: (row) => formatDateOnly(row.transaction_date) },
+    { header: "Categoría", cell: (row) => categoryLabels[row.category] },
+    {
+      header: "Monto",
+      className: "text-right",
+      cell: (row) => (
+        <span className={row.transaction_type === "income" ? "text-emerald-700" : "text-destructive"}>
+          {formatARS(row.amount, row.transaction_type)}
+        </span>
+      ),
+    },
+    { header: "Descripción", cell: (row) => row.description ?? "-" },
+    {
+      header: "",
+      className: "w-14 text-right",
+      cell: (row) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation()
+            void onDelete(row)
+          }}
+        >
+          <Trash2 />
+        </Button>
+      ),
+    },
+  ]
+
+  const defaults: Partial<TransactionInput> = {
+    transaction_type: "income",
+    category: "wo_payment",
+    counterparty_type: "client",
+    client_ucode: wo.client.ucode,
+    work_order_ucode: wo.ucode,
+    payment_method: "cash",
+  }
+
+  const onCreate = async (input: TransactionInput | UpdateTransactionInput) => {
+    try {
+      await createTransaction.mutateAsync(input as TransactionInput)
+      toast.success("Movimiento registrado")
+      setCreateOpen(false)
+    } catch (error) {
+      showTransactionError(error)
+    }
+  }
+
+  const onUpdate = async (input: TransactionInput | UpdateTransactionInput) => {
+    if (!selected) return
+    try {
+      await updateTransaction.mutateAsync({ ucode: selected.ucode, input: input as UpdateTransactionInput })
+      toast.success("Movimiento actualizado")
+      setSelected(undefined)
+    } catch {
+      toast.error("No se pudo actualizar el movimiento")
+    }
+  }
+
+  const onDelete = async (transaction: Transaction) => {
+    if (!window.confirm("¿Eliminar movimiento?\nEl movimiento se quitará de los reportes.")) return
+    try {
+      await deleteTransaction.mutateAsync({ ucode: transaction.ucode, workOrderUcode: wo.ucode })
+      toast.success("Movimiento eliminado")
+    } catch {
+      toast.error("No se pudo eliminar el movimiento")
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Pagos</CardTitle>
+        <CardAction>
+          <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus />
+            Registrar pago
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        <DataTable
+          columns={columns}
+          rows={transactions.data ?? []}
+          rowKey={(row) => row.ucode}
+          onRowClick={setSelected}
+          isLoading={transactions.isLoading}
+          emptyMessage="No hay movimientos para esta OT"
+          page={1}
+          pageSize={Math.max(transactions.data?.length ?? 0, 1)}
+          total={transactions.data?.length ?? 0}
+          onPageChange={() => undefined}
+          searchValue=""
+          onSearchChange={() => undefined}
+          showSearch={false}
+        />
+      </CardContent>
+      <TransactionForm
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        defaults={defaults}
+        onSubmit={onCreate}
+        isSubmitting={createTransaction.isPending}
+      />
+      <TransactionForm
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) setSelected(undefined)
+        }}
+        transaction={selected}
+        onSubmit={onUpdate}
+        isSubmitting={updateTransaction.isPending}
+      />
+    </Card>
   )
 }
 
