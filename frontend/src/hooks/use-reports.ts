@@ -28,6 +28,7 @@ export function useDashboard() {
   return useQuery({
     queryKey: ["reports", "dashboard"],
     queryFn: getDashboard,
+    refetchInterval: 60_000,
     staleTime: 60 * 1000,
   })
 }
