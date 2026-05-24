@@ -50,12 +50,16 @@ export const allCategories: TransactionCategory[] = [...incomeCategories, ...exp
 export const paymentMethods = Object.keys(paymentMethodLabels) as PaymentMethod[]
 
 export function formatARS(amount: string, type: TransactionType) {
+  const formatted = formatARSValue(amount)
+  return `${type === "income" ? "+" : "-"} ${formatted}`
+}
+
+export function formatARSValue(amount: string | number) {
   const value = Number(amount)
-  const formatted = new Intl.NumberFormat("es-AR", {
+  return new Intl.NumberFormat("es-AR", {
     style: "currency",
     currency: "ARS",
   }).format(Number.isFinite(value) ? value : 0)
-  return `${type === "income" ? "+" : "-"} ${formatted}`
 }
 
 export function formatDateOnly(value?: string) {

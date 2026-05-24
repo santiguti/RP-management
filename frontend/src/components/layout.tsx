@@ -40,13 +40,21 @@ export function AppLayout() {
           <NavLink to="/transactions" className={linkClass}>
             Movimientos
           </NavLink>
+          <NavLink to="/reports" className={linkClass}>
+            Reportes
+          </NavLink>
           <NavLink to="/suppliers" className={linkClass}>
             Proveedores
           </NavLink>
           {user?.role === "owner" ? (
-            <NavLink to="/settings/lookups" className={linkClass}>
-              Ajustes
-            </NavLink>
+            <>
+              <NavLink to="/settings/lookups" className={linkClass}>
+                Ajustes · Catálogos
+              </NavLink>
+              <NavLink to="/settings/recurring-expenses" className={linkClass}>
+                Ajustes · Gastos fijos
+              </NavLink>
+            </>
           ) : null}
         </nav>
         <div className="mt-auto space-y-3 px-3">
