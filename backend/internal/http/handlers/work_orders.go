@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	"github.com/santiguti/rp-management/backend/internal/domain/workorder"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
@@ -332,10 +333,6 @@ func (w *WorkOrders) Transition(rw http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if errors.Is(err, workorder.ErrUnknownEvent) {
-		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "unknown_event"})
-		return
-	}
 	if errors.Is(err, workorder.ErrUnknownStatus) {
 		log.Printf("work order %s has unknown status %q", current.WorkOrder.WoNumber, current.WorkOrder.Status)
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
@@ -376,7 +373,7 @@ func (w *WorkOrders) applyTransition(rw http.ResponseWriter, r *http.Request, cu
 			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
 			return sqlc.WorkOrder{}, false
 		}
-		quoteAmount, err := stringToNumeric(*req.QuoteAmount)
+		quoteAmount, err := money.StringToNumeric(*req.QuoteAmount)
 		if err != nil {
 			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
 			return sqlc.WorkOrder{}, false
@@ -571,14 +568,6 @@ func numericToStringPtr(n pgtype.Numeric) *string {
 	return &out
 }
 
-func stringToNumeric(raw string) (pgtype.Numeric, error) {
-	var n pgtype.Numeric
-	if err := n.Scan(strings.TrimSpace(raw)); err != nil {
-		return pgtype.Numeric{}, err
-	}
-	return n, nil
-}
-
 func numericFromPtr(rw http.ResponseWriter, raw *string) (pgtype.Numeric, bool) {
 	if raw == nil || strings.TrimSpace(*raw) == "" {
 		if raw != nil {
@@ -587,7 +576,7 @@ func numericFromPtr(rw http.ResponseWriter, raw *string) (pgtype.Numeric, bool) 
 		}
 		return pgtype.Numeric{}, true
 	}
-	n, err := stringToNumeric(*raw)
+	n, err := money.StringToNumeric(*raw)
 	if err != nil {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
 		return pgtype.Numeric{}, false

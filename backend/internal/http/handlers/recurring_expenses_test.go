@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 )
 
 func TestRecurring_CreateAsOwner(t *testing.T) {
@@ -268,7 +269,7 @@ func seedRecurringExpense(t *testing.T, q *sqlc.Queries, seed recurringSeed) sql
 	if seed.Active != nil {
 		active = *seed.Active
 	}
-	amount, err := stringToNumeric(seed.Amount)
+	amount, err := money.StringToNumeric(seed.Amount)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 )
 
 const AlreadyGeneratedReason = "already_generated_for_due_date"
@@ -46,7 +47,7 @@ func ProcessOne(ctx context.Context, q *sqlc.Queries, rule sqlc.RecurringExpense
 		}, nil
 	}
 
-	fxRate, err := numericFromString("1")
+	fxRate, err := money.StringToNumeric("1")
 	if err != nil {
 		return ProcessResult{}, err
 	}
@@ -93,12 +94,4 @@ func datePtr(date pgtype.Date) *time.Time {
 		return nil
 	}
 	return &date.Time
-}
-
-func numericFromString(raw string) (pgtype.Numeric, error) {
-	var n pgtype.Numeric
-	if err := n.Scan(raw); err != nil {
-		return pgtype.Numeric{}, err
-	}
-	return n, nil
 }

@@ -68,7 +68,7 @@ func seedOwner(args []string) error {
 		*fullName = *username
 	}
 
-	cfg, err := config.Load()
+	cfg, err := config.LoadForJobs()
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func runRecurring(args []string) error {
 		today = parsed
 	}
 
-	cfg, err := config.Load()
+	cfg, err := config.LoadForJobs()
 	if err != nil {
 		return err
 	}

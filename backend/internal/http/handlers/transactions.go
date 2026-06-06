@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
 
@@ -551,7 +552,7 @@ func workOrderRefFrom(ucode pgtype.UUID, woNumber pgtype.Text) *workOrderRef {
 }
 
 func parsePositiveNumeric(rw http.ResponseWriter, raw, errorCode string) (pgtype.Numeric, bool) {
-	n, err := stringToNumeric(raw)
+	n, err := money.StringToNumeric(raw)
 	if err != nil || !n.Valid || n.Int == nil || n.Int.Sign() <= 0 {
 		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": errorCode})
 		return pgtype.Numeric{}, false

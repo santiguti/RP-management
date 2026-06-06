@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 )
 
 func TestTransaction_CreateIncomeWithClient(t *testing.T) {
@@ -436,11 +437,11 @@ func seedTransaction(t *testing.T, q *sqlc.Queries, seed transactionSeed) sqlc.T
 	if seed.WorkOrderID != 0 {
 		workOrderID = pgtype.Int8{Int64: seed.WorkOrderID, Valid: true}
 	}
-	amount, err := stringToNumeric(seed.Amount)
+	amount, err := money.StringToNumeric(seed.Amount)
 	if err != nil {
 		t.Fatal(err)
 	}
-	fx, err := stringToNumeric("1")
+	fx, err := money.StringToNumeric("1")
 	if err != nil {
 		t.Fatal(err)
 	}
