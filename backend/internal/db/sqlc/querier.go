@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CountClients(ctx context.Context, q_ string) (int64, error)
+	CountParts(ctx context.Context, arg CountPartsParams) (int64, error)
 	CountTransactions(ctx context.Context, arg CountTransactionsParams) (int64, error)
 	CountWorkOrders(ctx context.Context, arg CountWorkOrdersParams) (int64, error)
 	CreateArticleType(ctx context.Context, arg CreateArticleTypeParams) (ArticleType, error)
@@ -19,6 +20,7 @@ type Querier interface {
 	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateDeviceModel(ctx context.Context, arg CreateDeviceModelParams) (DeviceModel, error)
+	CreatePart(ctx context.Context, arg CreatePartParams) (Part, error)
 	CreateRecurringExpense(ctx context.Context, arg CreateRecurringExpenseParams) (RecurringExpense, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
@@ -36,6 +38,8 @@ type Querier interface {
 	GetClientByUcode(ctx context.Context, ucode pgtype.UUID) (Client, error)
 	GetDeviceByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceByUcodeRow, error)
 	GetDeviceModelByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceModelByUcodeRow, error)
+	GetPartByID(ctx context.Context, id int64) (Part, error)
+	GetPartByUcode(ctx context.Context, ucode pgtype.UUID) (Part, error)
 	GetRecurringExpenseByUcode(ctx context.Context, ucode pgtype.UUID) (GetRecurringExpenseByUcodeRow, error)
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
 	GetSupplierByUcode(ctx context.Context, ucode pgtype.UUID) (Supplier, error)
@@ -62,6 +66,7 @@ type Querier interface {
 	ReportWorkOrderCountsByStatus(ctx context.Context) ([]ReportWorkOrderCountsByStatusRow, error)
 	SearchClients(ctx context.Context, arg SearchClientsParams) ([]Client, error)
 	SearchDevices(ctx context.Context, arg SearchDevicesParams) ([]SearchDevicesRow, error)
+	SearchParts(ctx context.Context, arg SearchPartsParams) ([]Part, error)
 	SetWorkOrderFinals(ctx context.Context, arg SetWorkOrderFinalsParams) (WorkOrder, error)
 	SetWorkOrderQuote(ctx context.Context, arg SetWorkOrderQuoteParams) (WorkOrder, error)
 	SetWorkOrderQuoteOutcome(ctx context.Context, arg SetWorkOrderQuoteOutcomeParams) (WorkOrder, error)
@@ -70,6 +75,7 @@ type Querier interface {
 	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
 	SoftDeleteDevice(ctx context.Context, arg SoftDeleteDeviceParams) error
 	SoftDeleteDeviceModel(ctx context.Context, arg SoftDeleteDeviceModelParams) error
+	SoftDeletePart(ctx context.Context, arg SoftDeletePartParams) error
 	SoftDeleteRecurringExpense(ctx context.Context, arg SoftDeleteRecurringExpenseParams) error
 	SoftDeleteSupplier(ctx context.Context, arg SoftDeleteSupplierParams) error
 	SoftDeleteTransaction(ctx context.Context, arg SoftDeleteTransactionParams) error
@@ -80,6 +86,7 @@ type Querier interface {
 	UpdateClient(ctx context.Context, arg UpdateClientParams) (Client, error)
 	UpdateDevice(ctx context.Context, arg UpdateDeviceParams) (Device, error)
 	UpdateDeviceModel(ctx context.Context, arg UpdateDeviceModelParams) (DeviceModel, error)
+	UpdatePart(ctx context.Context, arg UpdatePartParams) (Part, error)
 	UpdateRecurringExpense(ctx context.Context, arg UpdateRecurringExpenseParams) (RecurringExpense, error)
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
 	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)

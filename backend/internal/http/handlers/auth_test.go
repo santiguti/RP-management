@@ -250,6 +250,7 @@ func testRouter(q *sqlc.Queries) http.Handler {
 	transactionsH := NewTransactions(q)
 	recurringH := NewRecurringExpenses(q)
 	reportsH := NewReports(q)
+	partsH := NewParts(q)
 	brandsH := NewBrands(q)
 	modelsH := NewDeviceModels(q)
 	typesH := NewArticleTypes(q)
@@ -323,6 +324,13 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				sr.Get("/{ucode}", suppliersH.Get)
 				sr.Patch("/{ucode}", suppliersH.Update)
 				sr.Delete("/{ucode}", suppliersH.Delete)
+			})
+			pr.Route("/parts", func(pr2 chi.Router) {
+				pr2.Get("/", partsH.Search)
+				pr2.Post("/", partsH.Create)
+				pr2.Get("/{ucode}", partsH.Get)
+				pr2.Patch("/{ucode}", partsH.Update)
+				pr2.Delete("/{ucode}", partsH.Delete)
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))

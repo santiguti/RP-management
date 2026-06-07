@@ -20,6 +20,24 @@ type ArticleType struct {
 	Name            string             `json:"name"`
 }
 
+type Attachment struct {
+	ID               int64              `json:"id"`
+	Ucode            pgtype.UUID        `json:"ucode"`
+	CreatedTs        pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs         pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID   pgtype.Int8        `json:"voided_by_user_id"`
+	WorkOrderID      int64              `json:"work_order_id"`
+	Phase            string             `json:"phase"`
+	OriginalFilename string             `json:"original_filename"`
+	MimeType         string             `json:"mime_type"`
+	SizeBytes        int64              `json:"size_bytes"`
+	StoragePath      string             `json:"storage_path"`
+	Width            pgtype.Int4        `json:"width"`
+	Height           pgtype.Int4        `json:"height"`
+	UploadedByUserID pgtype.Int8        `json:"uploaded_by_user_id"`
+}
+
 type Brand struct {
 	ID              int64              `json:"id"`
 	Ucode           pgtype.UUID        `json:"ucode"`
@@ -72,6 +90,40 @@ type DeviceModel struct {
 	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
 	BrandID         int64              `json:"brand_id"`
 	Name            string             `json:"name"`
+}
+
+type Part struct {
+	ID               int64              `json:"id"`
+	Ucode            pgtype.UUID        `json:"ucode"`
+	CreatedTs        pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs         pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID   pgtype.Int8        `json:"voided_by_user_id"`
+	Sku              pgtype.Text        `json:"sku"`
+	Name             string             `json:"name"`
+	Description      pgtype.Text        `json:"description"`
+	Unit             string             `json:"unit"`
+	CurrentStock     pgtype.Numeric     `json:"current_stock"`
+	ReorderLevel     pgtype.Numeric     `json:"reorder_level"`
+	DefaultCost      pgtype.Numeric     `json:"default_cost"`
+	DefaultSalePrice pgtype.Numeric     `json:"default_sale_price"`
+}
+
+type PartMovement struct {
+	ID              int64              `json:"id"`
+	Ucode           pgtype.UUID        `json:"ucode"`
+	CreatedTs       pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs        pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID  pgtype.Int8        `json:"voided_by_user_id"`
+	PartID          int64              `json:"part_id"`
+	MovementType    string             `json:"movement_type"`
+	Quantity        pgtype.Numeric     `json:"quantity"`
+	UnitCost        pgtype.Numeric     `json:"unit_cost"`
+	SupplierID      pgtype.Int8        `json:"supplier_id"`
+	WorkOrderID     pgtype.Int8        `json:"work_order_id"`
+	TransactionID   pgtype.Int8        `json:"transaction_id"`
+	Notes           pgtype.Text        `json:"notes"`
 }
 
 type RecurringExpense struct {
@@ -188,4 +240,19 @@ type WorkOrder struct {
 	DeliveredTs        pgtype.Timestamptz `json:"delivered_ts"`
 	CancelledTs        pgtype.Timestamptz `json:"cancelled_ts"`
 	CancelReason       pgtype.Text        `json:"cancel_reason"`
+}
+
+type WorkOrderPart struct {
+	ID               int64              `json:"id"`
+	Ucode            pgtype.UUID        `json:"ucode"`
+	CreatedTs        pgtype.Timestamptz `json:"created_ts"`
+	CreatedByUserID  pgtype.Int8        `json:"created_by_user_id"`
+	VoidedTs         pgtype.Timestamptz `json:"voided_ts"`
+	VoidedByUserID   pgtype.Int8        `json:"voided_by_user_id"`
+	WorkOrderID      int64              `json:"work_order_id"`
+	PartID           int64              `json:"part_id"`
+	Quantity         pgtype.Numeric     `json:"quantity"`
+	UnitPriceCharged pgtype.Numeric     `json:"unit_price_charged"`
+	CostUnit         pgtype.Numeric     `json:"cost_unit"`
+	PartMovementID   pgtype.Int8        `json:"part_movement_id"`
 }

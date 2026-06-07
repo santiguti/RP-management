@@ -29,3 +29,7 @@ sql:
           rp_supplier: "Supplier"
           rp_transaction: "Transaction"
           rp_recurring_expense: "RecurringExpense"
+          rp_part: "Part"
+          rp_part_movement: "PartMovement"
+          rp_work_order_part: "WorkOrderPart"
+          rp_attachment: "Attachment"
