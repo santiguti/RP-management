@@ -34,6 +34,8 @@ import { CancelDialog } from "@/pages/work-orders/cancel-dialog"
 import { QuoteDialog } from "@/pages/work-orders/quote-dialog"
 import { ReadyDialog } from "@/pages/work-orders/ready-dialog"
 import { TransactionForm, showTransactionError } from "@/pages/transactions/transaction-form"
+import { WorkOrderPartsTab } from "@/pages/work-orders/parts-tab"
+import { AttachmentsTab } from "@/pages/work-orders/attachments-tab"
 
 const eventLabels: Record<WoEvent, string> = {
   start_diagnosis: "Iniciar diagnóstico",
@@ -136,10 +138,10 @@ export function WorkOrderDetailPage() {
           <CloseCard wo={wo} />
         </TabsContent>
         <TabsContent value="parts">
-          <PlaceholderCard text="Disponible a partir del Milestone 5" />
+          <WorkOrderPartsTab workOrder={wo} />
         </TabsContent>
         <TabsContent value="attachments">
-          <PlaceholderCard text="Disponible a partir del Milestone 5" />
+          <AttachmentsTab workOrder={wo} />
         </TabsContent>
         <TabsContent value="payments">
           <PaymentsCard wo={wo} />
