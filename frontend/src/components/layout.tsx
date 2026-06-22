@@ -37,14 +37,17 @@ export function AppLayout() {
           <NavLink to="/work-orders" className={linkClass}>
             Órdenes de trabajo
           </NavLink>
+          <NavLink to="/parts" className={linkClass}>
+            Repuestos
+          </NavLink>
           <NavLink to="/transactions" className={linkClass}>
             Movimientos
           </NavLink>
-          <NavLink to="/reports" className={linkClass}>
-            Reportes
-          </NavLink>
           <NavLink to="/suppliers" className={linkClass}>
             Proveedores
+          </NavLink>
+          <NavLink to="/reports" className={linkClass}>
+            Reportes
           </NavLink>
           {user?.role === "owner" ? (
             <>

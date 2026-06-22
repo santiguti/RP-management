@@ -17,6 +17,8 @@ import { TransactionsListPage } from "@/pages/transactions/list"
 import { SuppliersListPage } from "@/pages/suppliers/list"
 import { RecurringExpensesPage } from "@/pages/settings/recurring-expenses"
 import { ReportsPage } from "@/pages/reports"
+import { PartsListPage } from "@/pages/parts/list"
+import { PartDetailPage } from "@/pages/parts/detail"
 
 const qc = new QueryClient()
 
@@ -33,9 +35,12 @@ export default function App() {
             <Route path="work-orders" element={<WorkOrdersListPage />} />
             <Route path="work-orders/new" element={<IntakeWorkOrderPage />} />
             <Route path="work-orders/:ucode" element={<WorkOrderDetailPage />} />
+            <Route path="parts" element={<PartsListPage />} />
+            <Route path="parts/new" element={<PartsListPage createOnMount />} />
+            <Route path="parts/:ucode" element={<PartDetailPage />} />
             <Route path="transactions" element={<TransactionsListPage />} />
-            <Route path="reports" element={<ReportsPage />} />
             <Route path="suppliers" element={<SuppliersListPage />} />
+            <Route path="reports" element={<ReportsPage />} />
             <Route
               path="settings/lookups"
               element={
