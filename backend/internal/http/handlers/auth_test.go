@@ -23,9 +23,11 @@ import (
 	"github.com/santiguti/rp-management/backend/internal/config"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
+	"github.com/santiguti/rp-management/backend/internal/storage"
 )
 
 var testPool *pgxpool.Pool
+var testAttachmentStore *storage.FileStore
 
 func TestMain(m *testing.M) {
 	dsn := os.Getenv("RP_TEST_DATABASE_URL")
@@ -42,9 +44,21 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	testPool = pool
+	attachmentsDir, err := os.MkdirTemp("", "rp-management-attachments-test-*")
+	if err != nil {
+		pool.Close()
+		panic(err)
+	}
+	testAttachmentStore, err = storage.New(attachmentsDir)
+	if err != nil {
+		pool.Close()
+		_ = os.RemoveAll(attachmentsDir)
+		panic(err)
+	}
 
 	code := m.Run()
 	pool.Close()
+	_ = os.RemoveAll(attachmentsDir)
 	os.Exit(code)
 }
 
@@ -245,12 +259,13 @@ func testRouter(q *sqlc.Queries) http.Handler {
 	authH := NewAuth(q, config.Config{AppEnv: "dev"})
 	clientsH := NewClients(q)
 	devicesH := NewDevices(q)
-	workOrdersH := NewWorkOrders(q)
+	workOrdersH := NewWorkOrders(q, testPool)
 	suppliersH := NewSuppliers(q)
 	transactionsH := NewTransactions(q)
 	recurringH := NewRecurringExpenses(q)
 	reportsH := NewReports(q)
-	partsH := NewParts(q)
+	partsH := NewParts(q, testPool)
+	attachmentsH := NewAttachments(q, testAttachmentStore)
 	brandsH := NewBrands(q)
 	modelsH := NewDeviceModels(q)
 	typesH := NewArticleTypes(q)
@@ -292,6 +307,13 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				wr.Get("/", workOrdersH.Search)
 				wr.Get("/{ucode}", workOrdersH.Get)
 				wr.Get("/{ucode}/transactions", workOrdersH.ListTransactions)
+				wr.Get("/{ucode}/parts", workOrdersH.ListParts)
+				wr.Post("/{ucode}/parts", workOrdersH.AddPart)
+				wr.Delete("/{ucode}/parts/{id}", workOrdersH.RemovePart)
+				wr.Get("/{ucode}/attachments", attachmentsH.List)
+				wr.Post("/{ucode}/attachments", attachmentsH.Upload)
+				wr.Get("/{ucode}/attachments/{att_ucode}", attachmentsH.Download)
+				wr.Delete("/{ucode}/attachments/{att_ucode}", attachmentsH.Delete)
 				wr.Patch("/{ucode}", workOrdersH.Update)
 				wr.Post("/{ucode}/transitions/{event}", workOrdersH.Transition)
 			})
@@ -331,6 +353,8 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				pr2.Get("/{ucode}", partsH.Get)
 				pr2.Patch("/{ucode}", partsH.Update)
 				pr2.Delete("/{ucode}", partsH.Delete)
+				pr2.Get("/{ucode}/movements", partsH.ListMovements)
+				pr2.Post("/{ucode}/movements", partsH.CreateMovement)
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))

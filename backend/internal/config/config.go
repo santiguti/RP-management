@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	AppEnv       string
-	HTTPAddr     string
-	DatabaseURL  string
-	CookieSecret string
+	AppEnv         string
+	HTTPAddr       string
+	DatabaseURL    string
+	CookieSecret   string
+	AttachmentsDir string
 }
 
 func Load() (Config, error) {
@@ -38,10 +39,11 @@ func loadBase() (Config, error) {
 	_ = godotenv.Load(".env")
 
 	cfg := Config{
-		AppEnv:       getenv("APP_ENV", "dev"),
-		HTTPAddr:     getenv("HTTP_ADDR", ":8080"),
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		CookieSecret: os.Getenv("COOKIE_SECRET"),
+		AppEnv:         getenv("APP_ENV", "dev"),
+		HTTPAddr:       getenv("HTTP_ADDR", ":8080"),
+		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		CookieSecret:   os.Getenv("COOKIE_SECRET"),
+		AttachmentsDir: getenv("RP_ATTACHMENTS_DIR", "data/attachments"),
 	}
 
 	if cfg.DatabaseURL == "" {

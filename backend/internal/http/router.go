@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -15,19 +16,25 @@ import (
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/http/handlers"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
+	"github.com/santiguti/rp-management/backend/internal/storage"
 )
 
 func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 	queries := sqlc.New(pool)
+	store, err := storage.New(cfg.AttachmentsDir)
+	if err != nil {
+		panic(fmt.Errorf("attachments dir: %w", err))
+	}
 	authH := handlers.NewAuth(queries, cfg)
 	clientsH := handlers.NewClients(queries)
 	devicesH := handlers.NewDevices(queries)
-	workOrdersH := handlers.NewWorkOrders(queries)
+	workOrdersH := handlers.NewWorkOrders(queries, pool)
 	suppliersH := handlers.NewSuppliers(queries)
 	transactionsH := handlers.NewTransactions(queries)
 	recurringH := handlers.NewRecurringExpenses(queries)
 	reportsH := handlers.NewReports(queries)
-	partsH := handlers.NewParts(queries)
+	partsH := handlers.NewParts(queries, pool)
+	attachmentsH := handlers.NewAttachments(queries, store)
 	brandsH := handlers.NewBrands(queries)
 	modelsH := handlers.NewDeviceModels(queries)
 	typesH := handlers.NewArticleTypes(queries)
@@ -83,6 +90,13 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 				wr.Get("/", workOrdersH.Search)
 				wr.Get("/{ucode}", workOrdersH.Get)
 				wr.Get("/{ucode}/transactions", workOrdersH.ListTransactions)
+				wr.Get("/{ucode}/parts", workOrdersH.ListParts)
+				wr.Post("/{ucode}/parts", workOrdersH.AddPart)
+				wr.Delete("/{ucode}/parts/{id}", workOrdersH.RemovePart)
+				wr.Get("/{ucode}/attachments", attachmentsH.List)
+				wr.Post("/{ucode}/attachments", attachmentsH.Upload)
+				wr.Get("/{ucode}/attachments/{att_ucode}", attachmentsH.Download)
+				wr.Delete("/{ucode}/attachments/{att_ucode}", attachmentsH.Delete)
 				wr.Patch("/{ucode}", workOrdersH.Update)
 				wr.Post("/{ucode}/transitions/{event}", workOrdersH.Transition)
 			})
@@ -122,6 +136,8 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 				pr2.Get("/{ucode}", partsH.Get)
 				pr2.Patch("/{ucode}", partsH.Update)
 				pr2.Delete("/{ucode}", partsH.Delete)
+				pr2.Get("/{ucode}/movements", partsH.ListMovements)
+				pr2.Post("/{ucode}/movements", partsH.CreateMovement)
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))

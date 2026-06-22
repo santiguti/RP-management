@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"log"
+	"math/big"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,9 +15,11 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/domain/money"
+	partdomain "github.com/santiguti/rp-management/backend/internal/domain/parts"
 	"github.com/santiguti/rp-management/backend/internal/domain/workorder"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
@@ -92,13 +96,33 @@ type transitionReq struct {
 	CancelReason  *string `json:"cancel_reason" validate:"omitempty,max=2000"`
 }
 
+type woPartDTO struct {
+	ID               int64   `json:"id"`
+	PartUcode        string  `json:"part_ucode"`
+	PartName         string  `json:"part_name"`
+	PartUnit         string  `json:"part_unit"`
+	Quantity         string  `json:"quantity"`
+	UnitPriceCharged string  `json:"unit_price_charged"`
+	CostUnit         *string `json:"cost_unit,omitempty"`
+	Subtotal         string  `json:"subtotal"`
+	CreatedTs        string  `json:"created_ts"`
+}
+
+type createWoPartReq struct {
+	PartUcode        string  `json:"part_ucode" validate:"required"`
+	Quantity         string  `json:"quantity" validate:"required"`
+	UnitPriceCharged string  `json:"unit_price_charged" validate:"required"`
+	CostUnit         *string `json:"cost_unit" validate:"omitempty"`
+}
+
 type WorkOrders struct {
 	queries *sqlc.Queries
+	pool    *pgxpool.Pool
 	val     *validator.Validate
 }
 
-func NewWorkOrders(q *sqlc.Queries) *WorkOrders {
-	return &WorkOrders{queries: q, val: validator.New()}
+func NewWorkOrders(q *sqlc.Queries, pool *pgxpool.Pool) *WorkOrders {
+	return &WorkOrders{queries: q, pool: pool, val: validator.New()}
 }
 
 func (w *WorkOrders) Intake(rw http.ResponseWriter, r *http.Request) {
@@ -240,6 +264,232 @@ func (w *WorkOrders) ListTransactions(rw http.ResponseWriter, r *http.Request) {
 		out = append(out, toTransactionDTO(enrichedFromWorkOrderTransaction(row)))
 	}
 	writeJSON(rw, http.StatusOK, map[string][]transactionDTO{"transactions": out})
+}
+
+func (w *WorkOrders) AddPart(rw http.ResponseWriter, r *http.Request) {
+	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
+	if !ok {
+		return
+	}
+	workOrder, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+
+	var req createWoPartReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+	trimCreateWoPartReq(&req)
+	if err := w.val.Struct(req); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+
+	partUcode, err := uuidFromString(req.PartUcode)
+	if err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "unknown_part"})
+		return
+	}
+	part, err := w.queries.GetPartByUcode(r.Context(), partUcode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "unknown_part"})
+		return
+	}
+	if err != nil {
+		log.Printf("resolve work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	quantity, quantityRat, ok := parsePositiveWoPartNumeric(rw, req.Quantity)
+	if !ok {
+		return
+	}
+	unitPriceCharged, _, ok := parseNonNegativeWoPartNumeric(rw, req.UnitPriceCharged)
+	if !ok {
+		return
+	}
+	costUnit, _, ok := parseOptionalWoPartNumeric(rw, req.CostUnit)
+	if !ok {
+		return
+	}
+	delta, err := partdomain.SignedDelta(partdomain.MovementUse, quantityRat, false)
+	if err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+	if err := partdomain.CheckStockSufficient(partdomain.NumericToRat(part.CurrentStock), delta); err != nil {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "insufficient_stock"})
+		return
+	}
+
+	user, _ := middleware.UserFromContext(r.Context())
+	tx, err := w.pool.Begin(r.Context())
+	if err != nil {
+		log.Printf("begin add work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	txQueries := w.queries.WithTx(tx)
+	movementCost := costUnit
+	if !movementCost.Valid {
+		movementCost = part.DefaultCost
+	}
+	movement, err := txQueries.CreatePartMovement(r.Context(), sqlc.CreatePartMovementParams{
+		PartID:          part.ID,
+		MovementType:    string(partdomain.MovementUse),
+		Quantity:        numericFromRat(delta),
+		UnitCost:        movementCost,
+		WorkOrderID:     pgtype.Int8{Int64: workOrder.WorkOrder.ID, Valid: true},
+		Notes:           pgtype.Text{String: "WO " + workOrder.WorkOrder.WoNumber, Valid: true},
+		CreatedByUserID: pgtype.Int8{Int64: user.ID, Valid: true},
+	})
+	if err != nil {
+		log.Printf("create use movement: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	created, err := txQueries.CreateWorkOrderPart(r.Context(), sqlc.CreateWorkOrderPartParams{
+		WorkOrderID:      workOrder.WorkOrder.ID,
+		PartID:           part.ID,
+		Quantity:         quantity,
+		UnitPriceCharged: unitPriceCharged,
+		CostUnit:         costUnit,
+		PartMovementID:   pgtype.Int8{Int64: movement.ID, Valid: true},
+		CreatedByUserID:  pgtype.Int8{Int64: user.ID, Valid: true},
+	})
+	if err != nil {
+		log.Printf("create work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if err := txQueries.RecomputeWorkOrderPartsAmount(r.Context(), workOrder.WorkOrder.ID); err != nil {
+		log.Printf("recompute work order parts amount: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Printf("commit add work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	parts, err := w.queries.ListWorkOrderParts(r.Context(), workOrder.WorkOrder.ID)
+	if err != nil {
+		log.Printf("list added work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	var dto woPartDTO
+	found := false
+	for _, row := range parts {
+		if row.WorkOrderPart.ID == created.ID {
+			dto = toWoPartDTO(row)
+			found = true
+			break
+		}
+	}
+	if !found {
+		log.Printf("added work order part %d was not found", created.ID)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	updated, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+	writeJSON(rw, http.StatusCreated, map[string]any{
+		"work_order_part": dto,
+		"work_order": map[string]any{
+			"ucode":        uuidString(updated.WorkOrder.Ucode),
+			"parts_amount": numericToString(updated.WorkOrder.PartsAmount),
+		},
+	})
+}
+
+func (w *WorkOrders) ListParts(rw http.ResponseWriter, r *http.Request) {
+	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
+	if !ok {
+		return
+	}
+	workOrder, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+	rows, err := w.queries.ListWorkOrderParts(r.Context(), workOrder.WorkOrder.ID)
+	if err != nil {
+		log.Printf("list work order parts: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	out := make([]woPartDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, toWoPartDTO(row))
+	}
+	writeJSON(rw, http.StatusOK, map[string][]woPartDTO{"work_order_parts": out})
+}
+
+func (w *WorkOrders) RemovePart(rw http.ResponseWriter, r *http.Request) {
+	ucode, ok := parseUcode(rw, chi.URLParam(r, "ucode"))
+	if !ok {
+		return
+	}
+	workOrder, ok := w.workOrderByUcode(rw, r, ucode)
+	if !ok {
+		return
+	}
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id < 1 {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
+		return
+	}
+	workOrderPart, err := w.queries.GetWorkOrderPartByID(r.Context(), id)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && workOrderPart.WorkOrderID != workOrder.WorkOrder.ID) {
+		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
+		return
+	}
+	if err != nil {
+		log.Printf("get work order part for delete: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	user, _ := middleware.UserFromContext(r.Context())
+	tx, err := w.pool.Begin(r.Context())
+	if err != nil {
+		log.Printf("begin remove work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+	txQueries := w.queries.WithTx(tx)
+	voidedBy := pgtype.Int8{Int64: user.ID, Valid: true}
+	if err := txQueries.SoftDeleteWorkOrderPart(r.Context(), sqlc.SoftDeleteWorkOrderPartParams{ID: workOrderPart.ID, VoidedByUserID: voidedBy}); err != nil {
+		log.Printf("delete work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if workOrderPart.PartMovementID.Valid {
+		if err := txQueries.SoftDeletePartMovement(r.Context(), sqlc.SoftDeletePartMovementParams{ID: workOrderPart.PartMovementID.Int64, VoidedByUserID: voidedBy}); err != nil {
+			log.Printf("delete use movement: %v", err)
+			writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+			return
+		}
+	}
+	if err := txQueries.RecomputeWorkOrderPartsAmount(r.Context(), workOrder.WorkOrder.ID); err != nil {
+		log.Printf("recompute work order parts amount after delete: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		log.Printf("commit remove work order part: %v", err)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	rw.WriteHeader(http.StatusNoContent)
 }
 
 func (w *WorkOrders) Update(rw http.ResponseWriter, r *http.Request) {
@@ -584,6 +834,49 @@ func numericFromPtr(rw http.ResponseWriter, raw *string) (pgtype.Numeric, bool) 
 	return n, true
 }
 
+func toWoPartDTO(row sqlc.ListWorkOrderPartsRow) woPartDTO {
+	subtotal := new(big.Rat).Mul(
+		partdomain.NumericToRat(row.WorkOrderPart.Quantity),
+		partdomain.NumericToRat(row.WorkOrderPart.UnitPriceCharged),
+	)
+	return woPartDTO{
+		ID:               row.WorkOrderPart.ID,
+		PartUcode:        uuidString(row.PartUcode),
+		PartName:         row.PartName,
+		PartUnit:         row.PartUnit,
+		Quantity:         partNumericToString(row.WorkOrderPart.Quantity),
+		UnitPriceCharged: partNumericToString(row.WorkOrderPart.UnitPriceCharged),
+		CostUnit:         partNumericToStringPtr(row.WorkOrderPart.CostUnit),
+		Subtotal:         subtotal.FloatString(2),
+		CreatedTs:        timeString(row.WorkOrderPart.CreatedTs),
+	}
+}
+
+func parsePositiveWoPartNumeric(rw http.ResponseWriter, raw string) (pgtype.Numeric, *big.Rat, bool) {
+	n, err := money.StringToNumeric(raw)
+	if err != nil || !n.Valid || n.Int == nil || n.Int.Sign() <= 0 {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return pgtype.Numeric{}, nil, false
+	}
+	return n, partdomain.NumericToRat(n), true
+}
+
+func parseNonNegativeWoPartNumeric(rw http.ResponseWriter, raw string) (pgtype.Numeric, *big.Rat, bool) {
+	n, err := money.StringToNumeric(raw)
+	if err != nil || !n.Valid || n.Int == nil || n.Int.Sign() < 0 {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return pgtype.Numeric{}, nil, false
+	}
+	return n, partdomain.NumericToRat(n), true
+}
+
+func parseOptionalWoPartNumeric(rw http.ResponseWriter, raw *string) (pgtype.Numeric, *big.Rat, bool) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return pgtype.Numeric{}, nil, true
+	}
+	return parseNonNegativeWoPartNumeric(rw, *raw)
+}
+
 func decodeOptionalJSON(r io.Reader, dst any) error {
 	err := json.NewDecoder(r).Decode(dst)
 	if errors.Is(err, io.EOF) {
@@ -681,4 +974,11 @@ func trimTransitionReq(req *transitionReq) {
 	trimStringPtr(req.PartsAmount)
 	trimStringPtr(req.FinalAmount)
 	trimStringPtr(req.CancelReason)
+}
+
+func trimCreateWoPartReq(req *createWoPartReq) {
+	req.PartUcode = strings.TrimSpace(req.PartUcode)
+	req.Quantity = strings.TrimSpace(req.Quantity)
+	req.UnitPriceCharged = strings.TrimSpace(req.UnitPriceCharged)
+	trimStringPtr(req.CostUnit)
 }

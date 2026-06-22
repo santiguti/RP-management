@@ -123,6 +123,53 @@ func (q *Queries) CreateWorkOrder(ctx context.Context, arg CreateWorkOrderParams
 	return i, err
 }
 
+const createWorkOrderPart = `-- name: CreateWorkOrderPart :one
+INSERT INTO rp.work_order_parts (
+  work_order_id, part_id, quantity, unit_price_charged,
+  cost_unit, part_movement_id, created_by_user_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, work_order_id, part_id, quantity, unit_price_charged, cost_unit, part_movement_id
+`
+
+type CreateWorkOrderPartParams struct {
+	WorkOrderID      int64          `json:"work_order_id"`
+	PartID           int64          `json:"part_id"`
+	Quantity         pgtype.Numeric `json:"quantity"`
+	UnitPriceCharged pgtype.Numeric `json:"unit_price_charged"`
+	CostUnit         pgtype.Numeric `json:"cost_unit"`
+	PartMovementID   pgtype.Int8    `json:"part_movement_id"`
+	CreatedByUserID  pgtype.Int8    `json:"created_by_user_id"`
+}
+
+func (q *Queries) CreateWorkOrderPart(ctx context.Context, arg CreateWorkOrderPartParams) (WorkOrderPart, error) {
+	row := q.db.QueryRow(ctx, createWorkOrderPart,
+		arg.WorkOrderID,
+		arg.PartID,
+		arg.Quantity,
+		arg.UnitPriceCharged,
+		arg.CostUnit,
+		arg.PartMovementID,
+		arg.CreatedByUserID,
+	)
+	var i WorkOrderPart
+	err := row.Scan(
+		&i.ID,
+		&i.Ucode,
+		&i.CreatedTs,
+		&i.CreatedByUserID,
+		&i.VoidedTs,
+		&i.VoidedByUserID,
+		&i.WorkOrderID,
+		&i.PartID,
+		&i.Quantity,
+		&i.UnitPriceCharged,
+		&i.CostUnit,
+		&i.PartMovementID,
+	)
+	return i, err
+}
+
 const getWorkOrderByUcode = `-- name: GetWorkOrderByUcode :one
 SELECT
   wo.id, wo.ucode, wo.created_ts, wo.created_by_user_id, wo.voided_ts, wo.voided_by_user_id, wo.wo_number, wo.device_id, wo.client_id, wo.service_type, wo.status, wo.reported_issue, wo.diagnosis, wo.quote_amount, wo.quote_currency, wo.quote_sent_ts, wo.quote_approved_ts, wo.quote_rejected_ts, wo.final_amount, wo.labor_amount, wo.parts_amount, wo.intake_notes, wo.accessories, wo.device_pin_encrypted, wo.received_ts, wo.started_ts, wo.ready_ts, wo.delivered_ts, wo.cancelled_ts, wo.cancel_reason,
@@ -209,6 +256,87 @@ func (q *Queries) GetWorkOrderByUcode(ctx context.Context, ucode pgtype.UUID) (G
 		&i.DeviceSerial,
 	)
 	return i, err
+}
+
+const getWorkOrderPartByID = `-- name: GetWorkOrderPartByID :one
+SELECT id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, work_order_id, part_id, quantity, unit_price_charged, cost_unit, part_movement_id FROM rp.work_order_parts
+WHERE id = $1 AND voided_ts IS NULL
+`
+
+func (q *Queries) GetWorkOrderPartByID(ctx context.Context, id int64) (WorkOrderPart, error) {
+	row := q.db.QueryRow(ctx, getWorkOrderPartByID, id)
+	var i WorkOrderPart
+	err := row.Scan(
+		&i.ID,
+		&i.Ucode,
+		&i.CreatedTs,
+		&i.CreatedByUserID,
+		&i.VoidedTs,
+		&i.VoidedByUserID,
+		&i.WorkOrderID,
+		&i.PartID,
+		&i.Quantity,
+		&i.UnitPriceCharged,
+		&i.CostUnit,
+		&i.PartMovementID,
+	)
+	return i, err
+}
+
+const listWorkOrderParts = `-- name: ListWorkOrderParts :many
+SELECT
+  wop.id, wop.ucode, wop.created_ts, wop.created_by_user_id, wop.voided_ts, wop.voided_by_user_id, wop.work_order_id, wop.part_id, wop.quantity, wop.unit_price_charged, wop.cost_unit, wop.part_movement_id,
+  p.ucode AS part_ucode,
+  p.name AS part_name,
+  p.unit AS part_unit
+FROM rp.work_order_parts wop
+JOIN rp.parts p ON p.id = wop.part_id
+WHERE wop.work_order_id = $1
+  AND wop.voided_ts IS NULL
+ORDER BY wop.created_ts ASC, wop.id ASC
+`
+
+type ListWorkOrderPartsRow struct {
+	WorkOrderPart WorkOrderPart `json:"work_order_part"`
+	PartUcode     pgtype.UUID   `json:"part_ucode"`
+	PartName      string        `json:"part_name"`
+	PartUnit      string        `json:"part_unit"`
+}
+
+func (q *Queries) ListWorkOrderParts(ctx context.Context, workOrderID int64) ([]ListWorkOrderPartsRow, error) {
+	rows, err := q.db.Query(ctx, listWorkOrderParts, workOrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWorkOrderPartsRow{}
+	for rows.Next() {
+		var i ListWorkOrderPartsRow
+		if err := rows.Scan(
+			&i.WorkOrderPart.ID,
+			&i.WorkOrderPart.Ucode,
+			&i.WorkOrderPart.CreatedTs,
+			&i.WorkOrderPart.CreatedByUserID,
+			&i.WorkOrderPart.VoidedTs,
+			&i.WorkOrderPart.VoidedByUserID,
+			&i.WorkOrderPart.WorkOrderID,
+			&i.WorkOrderPart.PartID,
+			&i.WorkOrderPart.Quantity,
+			&i.WorkOrderPart.UnitPriceCharged,
+			&i.WorkOrderPart.CostUnit,
+			&i.WorkOrderPart.PartMovementID,
+			&i.PartUcode,
+			&i.PartName,
+			&i.PartUnit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listWorkOrders = `-- name: ListWorkOrders :many
@@ -324,6 +452,20 @@ func (q *Queries) ListWorkOrders(ctx context.Context, arg ListWorkOrdersParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const recomputeWorkOrderPartsAmount = `-- name: RecomputeWorkOrderPartsAmount :exec
+UPDATE rp.work_orders SET parts_amount = COALESCE((
+  SELECT SUM(quantity * unit_price_charged)::numeric(14,2)
+  FROM rp.work_order_parts
+  WHERE work_order_id = $1 AND voided_ts IS NULL
+), 0)
+WHERE id = $1
+`
+
+func (q *Queries) RecomputeWorkOrderPartsAmount(ctx context.Context, workOrderID int64) error {
+	_, err := q.db.Exec(ctx, recomputeWorkOrderPartsAmount, workOrderID)
+	return err
 }
 
 const setWorkOrderFinals = `-- name: SetWorkOrderFinals :one
@@ -525,6 +667,21 @@ type SoftDeleteWorkOrderParams struct {
 
 func (q *Queries) SoftDeleteWorkOrder(ctx context.Context, arg SoftDeleteWorkOrderParams) error {
 	_, err := q.db.Exec(ctx, softDeleteWorkOrder, arg.ID, arg.VoidedByUserID)
+	return err
+}
+
+const softDeleteWorkOrderPart = `-- name: SoftDeleteWorkOrderPart :exec
+UPDATE rp.work_order_parts SET voided_ts = now(), voided_by_user_id = $2
+WHERE id = $1 AND voided_ts IS NULL
+`
+
+type SoftDeleteWorkOrderPartParams struct {
+	ID             int64       `json:"id"`
+	VoidedByUserID pgtype.Int8 `json:"voided_by_user_id"`
+}
+
+func (q *Queries) SoftDeleteWorkOrderPart(ctx context.Context, arg SoftDeleteWorkOrderPartParams) error {
+	_, err := q.db.Exec(ctx, softDeleteWorkOrderPart, arg.ID, arg.VoidedByUserID)
 	return err
 }
 

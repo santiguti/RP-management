@@ -12,15 +12,18 @@ import (
 
 type Querier interface {
 	CountClients(ctx context.Context, q_ string) (int64, error)
+	CountPartMovements(ctx context.Context, partID int64) (int64, error)
 	CountParts(ctx context.Context, arg CountPartsParams) (int64, error)
 	CountTransactions(ctx context.Context, arg CountTransactionsParams) (int64, error)
 	CountWorkOrders(ctx context.Context, arg CountWorkOrdersParams) (int64, error)
 	CreateArticleType(ctx context.Context, arg CreateArticleTypeParams) (ArticleType, error)
+	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	CreateBrand(ctx context.Context, arg CreateBrandParams) (Brand, error)
 	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
 	CreateDeviceModel(ctx context.Context, arg CreateDeviceModelParams) (DeviceModel, error)
 	CreatePart(ctx context.Context, arg CreatePartParams) (Part, error)
+	CreatePartMovement(ctx context.Context, arg CreatePartMovementParams) (PartMovement, error)
 	CreateRecurringExpense(ctx context.Context, arg CreateRecurringExpenseParams) (RecurringExpense, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateSupplier(ctx context.Context, arg CreateSupplierParams) (Supplier, error)
@@ -30,9 +33,11 @@ type Querier interface {
 	CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkOrder(ctx context.Context, arg CreateWorkOrderParams) (WorkOrder, error)
+	CreateWorkOrderPart(ctx context.Context, arg CreateWorkOrderPartParams) (WorkOrderPart, error)
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteSession(ctx context.Context, id []byte) error
 	GetArticleTypeByUcode(ctx context.Context, ucode pgtype.UUID) (ArticleType, error)
+	GetAttachmentByUcode(ctx context.Context, ucode pgtype.UUID) (Attachment, error)
 	GetBrandByUcode(ctx context.Context, ucode pgtype.UUID) (Brand, error)
 	GetClientByPhone(ctx context.Context, phone pgtype.Text) (Client, error)
 	GetClientByUcode(ctx context.Context, ucode pgtype.UUID) (Client, error)
@@ -40,6 +45,7 @@ type Querier interface {
 	GetDeviceModelByUcode(ctx context.Context, ucode pgtype.UUID) (GetDeviceModelByUcodeRow, error)
 	GetPartByID(ctx context.Context, id int64) (Part, error)
 	GetPartByUcode(ctx context.Context, ucode pgtype.UUID) (Part, error)
+	GetPartMovementByUcode(ctx context.Context, ucode pgtype.UUID) (GetPartMovementByUcodeRow, error)
 	GetRecurringExpenseByUcode(ctx context.Context, ucode pgtype.UUID) (GetRecurringExpenseByUcodeRow, error)
 	GetSessionWithUser(ctx context.Context, id []byte) (GetSessionWithUserRow, error)
 	GetSupplierByUcode(ctx context.Context, ucode pgtype.UUID) (Supplier, error)
@@ -47,17 +53,22 @@ type Querier interface {
 	GetUserByID(ctx context.Context, id int64) (User, error)
 	GetUserByUsername(ctx context.Context, username string) (User, error)
 	GetWorkOrderByUcode(ctx context.Context, ucode pgtype.UUID) (GetWorkOrderByUcodeRow, error)
+	GetWorkOrderPartByID(ctx context.Context, id int64) (WorkOrderPart, error)
 	ListArticleTypes(ctx context.Context) ([]ArticleType, error)
 	ListBrands(ctx context.Context) ([]Brand, error)
 	ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error)
 	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)
 	ListDueRecurringExpenses(ctx context.Context, dollar_1 pgtype.Date) ([]RecurringExpense, error)
+	ListPartMovements(ctx context.Context, arg ListPartMovementsParams) ([]ListPartMovementsRow, error)
 	ListRecurringExpenses(ctx context.Context) ([]ListRecurringExpensesRow, error)
 	ListSuppliers(ctx context.Context) ([]Supplier, error)
 	ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]ListTransactionsRow, error)
+	ListWorkOrderAttachments(ctx context.Context, workOrderID int64) ([]Attachment, error)
+	ListWorkOrderParts(ctx context.Context, workOrderID int64) ([]ListWorkOrderPartsRow, error)
 	ListWorkOrderTransactions(ctx context.Context, workOrderID pgtype.Int8) ([]ListWorkOrderTransactionsRow, error)
 	ListWorkOrders(ctx context.Context, arg ListWorkOrdersParams) ([]ListWorkOrdersRow, error)
 	MarkRecurringExpenseGenerated(ctx context.Context, arg MarkRecurringExpenseGeneratedParams) error
+	RecomputeWorkOrderPartsAmount(ctx context.Context, workOrderID int64) error
 	ReportAgingReadyWorkOrders(ctx context.Context) ([]ReportAgingReadyWorkOrdersRow, error)
 	ReportBalance(ctx context.Context, arg ReportBalanceParams) (ReportBalanceRow, error)
 	ReportDashboardCounters(ctx context.Context) (ReportDashboardCountersRow, error)
@@ -71,15 +82,18 @@ type Querier interface {
 	SetWorkOrderQuote(ctx context.Context, arg SetWorkOrderQuoteParams) (WorkOrder, error)
 	SetWorkOrderQuoteOutcome(ctx context.Context, arg SetWorkOrderQuoteOutcomeParams) (WorkOrder, error)
 	SoftDeleteArticleType(ctx context.Context, arg SoftDeleteArticleTypeParams) error
+	SoftDeleteAttachment(ctx context.Context, arg SoftDeleteAttachmentParams) error
 	SoftDeleteBrand(ctx context.Context, arg SoftDeleteBrandParams) error
 	SoftDeleteClient(ctx context.Context, arg SoftDeleteClientParams) error
 	SoftDeleteDevice(ctx context.Context, arg SoftDeleteDeviceParams) error
 	SoftDeleteDeviceModel(ctx context.Context, arg SoftDeleteDeviceModelParams) error
 	SoftDeletePart(ctx context.Context, arg SoftDeletePartParams) error
+	SoftDeletePartMovement(ctx context.Context, arg SoftDeletePartMovementParams) error
 	SoftDeleteRecurringExpense(ctx context.Context, arg SoftDeleteRecurringExpenseParams) error
 	SoftDeleteSupplier(ctx context.Context, arg SoftDeleteSupplierParams) error
 	SoftDeleteTransaction(ctx context.Context, arg SoftDeleteTransactionParams) error
 	SoftDeleteWorkOrder(ctx context.Context, arg SoftDeleteWorkOrderParams) error
+	SoftDeleteWorkOrderPart(ctx context.Context, arg SoftDeleteWorkOrderPartParams) error
 	TouchSession(ctx context.Context, id []byte) error
 	UpdateArticleType(ctx context.Context, arg UpdateArticleTypeParams) (ArticleType, error)
 	UpdateBrand(ctx context.Context, arg UpdateBrandParams) (Brand, error)

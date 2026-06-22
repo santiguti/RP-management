@@ -33,6 +33,7 @@ pnpm-debug.log*
 *.local.yml
 /var/lib/rp/
 /mnt/backup/
+/data/
 
 # ─── Editors / OS ────────────────────────────────────────
 .vscode/

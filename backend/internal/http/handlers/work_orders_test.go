@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -601,9 +602,200 @@ func TestTransition_OnSite_FastTrack(t *testing.T) {
 	}
 }
 
+func TestWoParts_AddCreatesMovementAndUpdatesAmount(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Repuestos", "WO-PARTS-ADD")
+	part := seedPart(t, q, partSeed{Name: "Display", DefaultCost: "100.00"})
+	insertPartMovement(t, part.ID, "purchase", "10.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrder := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	added := addWoPart(t, client, ts.URL, csrf, workOrder.WorkOrder.Ucode, part.Ucode, "3", "200.00", nil)
+	if added.WorkOrderPart.PartName != "Display" || added.WorkOrderPart.Quantity != "3.00" || added.WorkOrderPart.Subtotal != "600.00" {
+		t.Fatalf("work_order_part = %+v, want Display/3.00/600.00", added.WorkOrderPart)
+	}
+	if added.WorkOrder.PartsAmount != "600.00" {
+		t.Fatalf("parts_amount = %q, want 600.00", added.WorkOrder.PartsAmount)
+	}
+	updatedPart, err := q.GetPartByID(context.Background(), part.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(updatedPart.CurrentStock); got != "7.00" {
+		t.Fatalf("current_stock = %q, want 7.00", got)
+	}
+	rows, err := q.ListPartMovements(context.Background(), sqlc.ListPartMovementsParams{PartID: part.ID, PageSize: 25})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].PartMovement.MovementType != "use" || rows[0].PartMovement.WorkOrderID.Int64 != mustWorkOrderID(t, q, workOrder.WorkOrder.Ucode) {
+		t.Fatalf("movements = %+v, want linked use movement", rows)
+	}
+}
+
+func TestWoParts_AddDecrementsStockExactly(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Decimal", "WO-PARTS-DECIMAL")
+	part := seedPart(t, q, partSeed{Name: "Cable", Unit: "metro"})
+	insertPartMovement(t, part.ID, "purchase", "10.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrder := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	addWoPart(t, client, ts.URL, csrf, workOrder.WorkOrder.Ucode, part.Ucode, "2.5", "200.00", nil)
+	updatedPart, err := q.GetPartByID(context.Background(), part.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(updatedPart.CurrentStock); got != "7.50" {
+		t.Fatalf("current_stock = %q, want 7.50", got)
+	}
+}
+
+func TestWoParts_InsufficientStock_400(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Sin Stock", "WO-PARTS-NOSTOCK")
+	part := seedPart(t, q, partSeed{Name: "Bateria"})
+	insertPartMovement(t, part.ID, "purchase", "1.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrder := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	res := postJSON(t, client, ts.URL+"/api/v1/work-orders/"+workOrder.WorkOrder.Ucode+"/parts", map[string]string{
+		"part_ucode":         uuidString(part.Ucode),
+		"quantity":           "5",
+		"unit_price_charged": "200.00",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "insufficient_stock")
+	rows, err := q.ListWorkOrderParts(context.Background(), mustWorkOrderID(t, q, workOrder.WorkOrder.Ucode))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("work order parts = %+v, want none", rows)
+	}
+}
+
+func TestWoParts_AddMultipleAccumulatesAmount(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Multiples", "WO-PARTS-MULTI")
+	first := seedPart(t, q, partSeed{Name: "Modulo"})
+	second := seedPart(t, q, partSeed{Name: "Bateria"})
+	insertPartMovement(t, first.ID, "purchase", "10.00")
+	insertPartMovement(t, second.ID, "purchase", "10.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrder := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	addWoPart(t, client, ts.URL, csrf, workOrder.WorkOrder.Ucode, first.Ucode, "3", "200.00", nil)
+	addWoPart(t, client, ts.URL, csrf, workOrder.WorkOrder.Ucode, second.Ucode, "2", "200.00", nil)
+	get, err := client.Get(ts.URL + "/api/v1/work-orders/" + workOrder.WorkOrder.Ucode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer get.Body.Close()
+	body := decodeWorkOrderBody(t, get, http.StatusOK)
+	assertMoneyPtr(t, body.WorkOrder.PartsAmount, "1000.00")
+}
+
+func TestWoParts_RemoveRestoresStockAndAmount(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Quitar", "WO-PARTS-REMOVE")
+	part := seedPart(t, q, partSeed{Name: "Display"})
+	insertPartMovement(t, part.ID, "purchase", "10.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrder := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+	added := addWoPart(t, client, ts.URL, csrf, workOrder.WorkOrder.Ucode, part.Ucode, "3", "200.00", nil)
+
+	res := deleteReq(t, client, ts.URL+"/api/v1/work-orders/"+workOrder.WorkOrder.Ucode+"/parts/"+strconv.FormatInt(added.WorkOrderPart.ID, 10), csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusNoContent, readBody(t, res))
+	}
+	updatedPart, err := q.GetPartByID(context.Background(), part.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(updatedPart.CurrentStock); got != "10.00" {
+		t.Fatalf("current_stock = %q, want 10.00", got)
+	}
+	get, err := client.Get(ts.URL + "/api/v1/work-orders/" + workOrder.WorkOrder.Ucode)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer get.Body.Close()
+	body := decodeWorkOrderBody(t, get, http.StatusOK)
+	assertMoneyPtr(t, body.WorkOrder.PartsAmount, "0")
+}
+
+func TestWoParts_RemoveMismatchWO_404(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	aFixture := seedClientAndDevice(t, q, "Cliente A Partes", "WO-PARTS-A")
+	bFixture := seedClientAndDevice(t, q, "Cliente B Partes", "WO-PARTS-B")
+	part := seedPart(t, q, partSeed{Name: "Display"})
+	insertPartMovement(t, part.ID, "purchase", "10.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrderA := intakeWorkOrder(t, client, ts.URL, csrf, aFixture.client, aFixture.device, "in_shop")
+	workOrderB := intakeWorkOrder(t, client, ts.URL, csrf, bFixture.client, bFixture.device, "in_shop")
+	added := addWoPart(t, client, ts.URL, csrf, workOrderA.WorkOrder.Ucode, part.Ucode, "3", "200.00", nil)
+
+	res := deleteReq(t, client, ts.URL+"/api/v1/work-orders/"+workOrderB.WorkOrder.Ucode+"/parts/"+strconv.FormatInt(added.WorkOrderPart.ID, 10), csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusNotFound, "not_found")
+}
+
+func TestWoParts_UnknownPart_400(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Parte Desconocida", "WO-PARTS-UNKNOWN")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+	workOrder := intakeWorkOrder(t, client, ts.URL, csrf, fixture.client, fixture.device, "in_shop")
+
+	res := postJSON(t, client, ts.URL+"/api/v1/work-orders/"+workOrder.WorkOrder.Ucode+"/parts", map[string]string{
+		"part_ucode":         "00000000-0000-0000-0000-000000000000",
+		"quantity":           "1",
+		"unit_price_charged": "200.00",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "unknown_part")
+}
+
 type workOrderFixture struct {
 	client sqlc.Client
 	device sqlc.Device
+}
+
+type workOrderPartBody struct {
+	WorkOrderPart woPartDTO `json:"work_order_part"`
+	WorkOrder     struct {
+		Ucode       string `json:"ucode"`
+		PartsAmount string `json:"parts_amount"`
+	} `json:"work_order"`
 }
 
 func seedClientAndDevice(t *testing.T, q *sqlc.Queries, clientName, serial string) workOrderFixture {
@@ -639,6 +831,35 @@ func intakeWorkOrder(t *testing.T, client *http.Client, baseURL, csrf string, c 
 	}, csrf)
 	defer res.Body.Close()
 	return decodeWorkOrderBody(t, res, http.StatusCreated)
+}
+
+func addWoPart(t *testing.T, client *http.Client, baseURL, csrf, workOrderUcode string, partUcode pgtype.UUID, quantity, unitPrice string, costUnit *string) workOrderPartBody {
+	t.Helper()
+	payload := map[string]any{
+		"part_ucode":         uuidString(partUcode),
+		"quantity":           quantity,
+		"unit_price_charged": unitPrice,
+	}
+	if costUnit != nil {
+		payload["cost_unit"] = *costUnit
+	}
+	res := postJSON(t, client, baseURL+"/api/v1/work-orders/"+workOrderUcode+"/parts", payload, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusCreated, readBody(t, res))
+	}
+	var body workOrderPartBody
+	decodeJSON(t, res.Body, &body)
+	return body
+}
+
+func mustWorkOrderID(t *testing.T, q *sqlc.Queries, rawUcode string) int64 {
+	t.Helper()
+	row, err := q.GetWorkOrderByUcode(context.Background(), mustUUID(t, rawUcode))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return row.WorkOrder.ID
 }
 
 func decodeWorkOrderBody(t *testing.T, res *http.Response, status int) workOrderBody {

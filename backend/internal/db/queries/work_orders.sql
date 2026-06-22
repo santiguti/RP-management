@@ -151,3 +151,39 @@ SET
   voided_by_user_id = $2
 WHERE id = $1
   AND voided_ts IS NULL;
+
+-- name: ListWorkOrderParts :many
+SELECT
+  sqlc.embed(wop),
+  p.ucode AS part_ucode,
+  p.name AS part_name,
+  p.unit AS part_unit
+FROM rp.work_order_parts wop
+JOIN rp.parts p ON p.id = wop.part_id
+WHERE wop.work_order_id = $1
+  AND wop.voided_ts IS NULL
+ORDER BY wop.created_ts ASC, wop.id ASC;
+
+-- name: GetWorkOrderPartByID :one
+SELECT * FROM rp.work_order_parts
+WHERE id = $1 AND voided_ts IS NULL;
+
+-- name: CreateWorkOrderPart :one
+INSERT INTO rp.work_order_parts (
+  work_order_id, part_id, quantity, unit_price_charged,
+  cost_unit, part_movement_id, created_by_user_id
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING *;
+
+-- name: SoftDeleteWorkOrderPart :exec
+UPDATE rp.work_order_parts SET voided_ts = now(), voided_by_user_id = $2
+WHERE id = $1 AND voided_ts IS NULL;
+
+-- name: RecomputeWorkOrderPartsAmount :exec
+UPDATE rp.work_orders SET parts_amount = COALESCE((
+  SELECT SUM(quantity * unit_price_charged)::numeric(14,2)
+  FROM rp.work_order_parts
+  WHERE work_order_id = $1 AND voided_ts IS NULL
+), 0)
+WHERE id = $1;
