@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/domain/money"
@@ -52,13 +55,40 @@ type updatePartReq struct {
 	DefaultSalePrice *string `json:"default_sale_price" validate:"omitempty"`
 }
 
+type movementDTO struct {
+	Ucode        string           `json:"ucode"`
+	MovementType string           `json:"movement_type"`
+	Quantity     string           `json:"quantity"`
+	UnitCost     *string          `json:"unit_cost,omitempty"`
+	Supplier     *counterpartyRef `json:"supplier,omitempty"`
+	WorkOrder    *workOrderRef    `json:"work_order,omitempty"`
+	Transaction  *movementTxnRef  `json:"transaction,omitempty"`
+	Notes        *string          `json:"notes,omitempty"`
+	CreatedTs    string           `json:"created_ts"`
+}
+
+type movementTxnRef struct {
+	Ucode string `json:"ucode"`
+}
+
+type createMovementReq struct {
+	MovementType    string  `json:"movement_type" validate:"required,oneof=purchase adjustment return"`
+	Quantity        string  `json:"quantity" validate:"required"`
+	AdjustmentOut   *bool   `json:"adjustment_out" validate:"omitempty"`
+	UnitCost        *string `json:"unit_cost" validate:"omitempty"`
+	SupplierUcode   *string `json:"supplier_ucode" validate:"omitempty"`
+	Notes           *string `json:"notes" validate:"omitempty,max=2000"`
+	LinkTransaction *bool   `json:"link_transaction" validate:"omitempty"`
+}
+
 type Parts struct {
 	queries *sqlc.Queries
+	pool    *pgxpool.Pool
 	val     *validator.Validate
 }
 
-func NewParts(q *sqlc.Queries) *Parts {
-	return &Parts{queries: q, val: validator.New()}
+func NewParts(q *sqlc.Queries, pool *pgxpool.Pool) *Parts {
+	return &Parts{queries: q, pool: pool, val: validator.New()}
 }
 
 func (p *Parts) Create(w http.ResponseWriter, r *http.Request) {
@@ -255,6 +285,122 @@ func (p *Parts) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (p *Parts) CreateMovement(w http.ResponseWriter, r *http.Request) {
+	part, ok := p.partByUcode(w, r)
+	if !ok {
+		return
+	}
+
+	var req createMovementReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+	trimCreateMovementReq(&req)
+	if req.MovementType == string(partdomain.MovementUse) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "use_movements_via_work_order_only"})
+		return
+	}
+	if err := p.val.Struct(req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+
+	_, quantityRat, ok := parsePositiveMovementQuantity(w, req.Quantity)
+	if !ok {
+		return
+	}
+	adjustmentOut := req.AdjustmentOut != nil && *req.AdjustmentOut
+	if req.MovementType == string(partdomain.MovementAdjustment) && req.AdjustmentOut == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "adjustment_direction_required"})
+		return
+	}
+	delta, err := partdomain.SignedDelta(partdomain.MovementType(req.MovementType), quantityRat, adjustmentOut)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return
+	}
+	if req.MovementType == string(partdomain.MovementAdjustment) && adjustmentOut {
+		if err := partdomain.CheckStockSufficient(partdomain.NumericToRat(part.CurrentStock), delta); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "insufficient_stock"})
+			return
+		}
+	}
+
+	unitCost, unitCostRat, ok := parseOptionalMovementCost(w, req.UnitCost)
+	if !ok {
+		return
+	}
+	supplierID, ok := p.resolveMovementSupplier(w, r, req.SupplierUcode)
+	if !ok {
+		return
+	}
+	user, _ := middleware.UserFromContext(r.Context())
+	params := sqlc.CreatePartMovementParams{
+		PartID:          part.ID,
+		MovementType:    req.MovementType,
+		Quantity:        numericFromRat(delta),
+		UnitCost:        unitCost,
+		SupplierID:      supplierID,
+		Notes:           textFromPtr(req.Notes),
+		CreatedByUserID: pgtype.Int8{Int64: user.ID, Valid: true},
+	}
+
+	var movement sqlc.PartMovement
+	if req.MovementType == string(partdomain.MovementPurchase) && req.LinkTransaction != nil && *req.LinkTransaction && unitCost.Valid {
+		movement, err = p.createPurchaseMovementWithTransaction(r, part, params, quantityRat, unitCostRat, supplierID)
+	} else {
+		movement, err = p.queries.CreatePartMovement(r.Context(), params)
+	}
+	if err != nil {
+		log.Printf("create part movement: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+
+	row, err := p.queries.GetPartMovementByUcode(r.Context(), movement.Ucode)
+	if err != nil {
+		log.Printf("refetch created part movement: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]movementDTO{"movement": movementDTOFrom(row.PartMovement, row.SupplierUcode, row.SupplierName, row.WorkOrderUcode, row.WorkOrderNumber, row.TransactionUcode)})
+}
+
+func (p *Parts) ListMovements(w http.ResponseWriter, r *http.Request) {
+	part, ok := p.partByUcode(w, r)
+	if !ok {
+		return
+	}
+	page, pageSize := parseMovementPagination(r)
+	total, err := p.queries.CountPartMovements(r.Context(), part.ID)
+	if err != nil {
+		log.Printf("count part movements: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	rows, err := p.queries.ListPartMovements(r.Context(), sqlc.ListPartMovementsParams{
+		PartID:     part.ID,
+		PageSize:   int32(pageSize),
+		PageOffset: int32((page - 1) * pageSize),
+	})
+	if err != nil {
+		log.Printf("list part movements: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	out := make([]movementDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, movementDTOFrom(row.PartMovement, row.SupplierUcode, row.SupplierName, row.WorkOrderUcode, row.WorkOrderNumber, row.TransactionUcode))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"movements": out,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	})
+}
+
 func (p *Parts) partByUcode(w http.ResponseWriter, r *http.Request) (sqlc.Part, bool) {
 	ucode, ok := parseUcode(w, chi.URLParam(r, "ucode"))
 	if !ok {
@@ -271,6 +417,79 @@ func (p *Parts) partByUcode(w http.ResponseWriter, r *http.Request) (sqlc.Part, 
 		return sqlc.Part{}, false
 	}
 	return part, true
+}
+
+func (p *Parts) createPurchaseMovementWithTransaction(
+	r *http.Request,
+	part sqlc.Part,
+	movementParams sqlc.CreatePartMovementParams,
+	quantity, unitCost *big.Rat,
+	supplierID pgtype.Int8,
+) (sqlc.PartMovement, error) {
+	tx, err := p.pool.Begin(r.Context())
+	if err != nil {
+		return sqlc.PartMovement{}, err
+	}
+	defer func() { _ = tx.Rollback(r.Context()) }()
+
+	amount := new(big.Rat).Mul(quantity, unitCost)
+	counterpartyType := "none"
+	if supplierID.Valid {
+		counterpartyType = "supplier"
+	}
+	description := "Compra de repuesto: " + part.Name
+	if movementParams.Notes.Valid {
+		description = movementParams.Notes.String
+	}
+	now := time.Now().UTC()
+	txQueries := p.queries.WithTx(tx)
+	transaction, err := txQueries.CreateTransaction(r.Context(), sqlc.CreateTransactionParams{
+		TransactionType:  "expense",
+		Amount:           numericFromRat(amount),
+		Currency:         "ARS",
+		FxRateToArs:      numericFromRat(big.NewRat(1, 1)),
+		TransactionDate:  pgtype.Date{Time: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), Valid: true},
+		PaymentMethod:    "transfer",
+		Category:         "part_purchase",
+		CounterpartyType: counterpartyType,
+		SupplierID:       supplierID,
+		Description:      pgtype.Text{String: description, Valid: true},
+		CreatedByUserID:  movementParams.CreatedByUserID,
+	})
+	if err != nil {
+		return sqlc.PartMovement{}, err
+	}
+	movementParams.TransactionID = pgtype.Int8{Int64: transaction.ID, Valid: true}
+	movement, err := txQueries.CreatePartMovement(r.Context(), movementParams)
+	if err != nil {
+		return sqlc.PartMovement{}, err
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		return sqlc.PartMovement{}, err
+	}
+	return movement, nil
+}
+
+func (p *Parts) resolveMovementSupplier(w http.ResponseWriter, r *http.Request, raw *string) (pgtype.Int8, bool) {
+	if raw == nil || strings.TrimSpace(*raw) == "" {
+		return pgtype.Int8{}, true
+	}
+	ucode, err := uuidFromString(*raw)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown_supplier"})
+		return pgtype.Int8{}, false
+	}
+	supplier, err := p.queries.GetSupplierByUcode(r.Context(), ucode)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown_supplier"})
+		return pgtype.Int8{}, false
+	}
+	if err != nil {
+		log.Printf("resolve movement supplier: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return pgtype.Int8{}, false
+	}
+	return pgtype.Int8{Int64: supplier.ID, Valid: true}, true
 }
 
 func parsePartSearchParams(r *http.Request) (sqlc.SearchPartsParams, sqlc.CountPartsParams, int, int) {
@@ -311,6 +530,24 @@ func toPartDTO(part sqlc.Part) partDTO {
 	}
 }
 
+func movementDTOFrom(movement sqlc.PartMovement, supplierUcode pgtype.UUID, supplierName pgtype.Text, workOrderUcode pgtype.UUID, workOrderNumber pgtype.Text, transactionUcode pgtype.UUID) movementDTO {
+	var transaction *movementTxnRef
+	if transactionUcode.Valid {
+		transaction = &movementTxnRef{Ucode: uuidString(transactionUcode)}
+	}
+	return movementDTO{
+		Ucode:        uuidString(movement.Ucode),
+		MovementType: movement.MovementType,
+		Quantity:     partNumericToString(movement.Quantity),
+		UnitCost:     partNumericToStringPtr(movement.UnitCost),
+		Supplier:     counterpartyRefFrom(supplierUcode, supplierName),
+		WorkOrder:    workOrderRefFrom(workOrderUcode, workOrderNumber),
+		Transaction:  transaction,
+		Notes:        stringPtrFromText(movement.Notes),
+		CreatedTs:    timeString(movement.CreatedTs),
+	}
+}
+
 func partNumericToString(n pgtype.Numeric) string {
 	return partdomain.NumericToRat(n).FloatString(2)
 }
@@ -335,6 +572,43 @@ func parseOptionalNonNegativeNumeric(w http.ResponseWriter, raw *string) (pgtype
 	return n, true
 }
 
+func parsePositiveMovementQuantity(w http.ResponseWriter, raw string) (pgtype.Numeric, *big.Rat, bool) {
+	n, err := money.StringToNumeric(raw)
+	if err != nil || !n.Valid || n.Int == nil || n.Int.Sign() <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_body"})
+		return pgtype.Numeric{}, nil, false
+	}
+	return n, partdomain.NumericToRat(n), true
+}
+
+func parseOptionalMovementCost(w http.ResponseWriter, raw *string) (pgtype.Numeric, *big.Rat, bool) {
+	n, ok := parseOptionalNonNegativeNumeric(w, raw)
+	if !ok {
+		return pgtype.Numeric{}, nil, false
+	}
+	if !n.Valid {
+		return n, nil, true
+	}
+	return n, partdomain.NumericToRat(n), true
+}
+
+func numericFromRat(r *big.Rat) pgtype.Numeric {
+	n, err := money.StringToNumeric(r.FloatString(2))
+	if err != nil {
+		return pgtype.Numeric{}
+	}
+	return n
+}
+
+func parseMovementPagination(r *http.Request) (int, int) {
+	page := parsePositiveInt(r.URL.Query().Get("page"), 1)
+	pageSize := parsePositiveInt(r.URL.Query().Get("page_size"), 25)
+	if pageSize > 100 {
+		pageSize = 100
+	}
+	return page, pageSize
+}
+
 func trimCreatePartReq(req *createPartReq) {
 	req.Name = strings.TrimSpace(req.Name)
 	trimStringPtr(req.Sku)
@@ -353,4 +627,12 @@ func trimUpdatePartReq(req *updatePartReq) {
 	trimStringPtr(req.ReorderLevel)
 	trimStringPtr(req.DefaultCost)
 	trimStringPtr(req.DefaultSalePrice)
+}
+
+func trimCreateMovementReq(req *createMovementReq) {
+	req.MovementType = strings.TrimSpace(req.MovementType)
+	req.Quantity = strings.TrimSpace(req.Quantity)
+	trimStringPtr(req.UnitCost)
+	trimStringPtr(req.SupplierUcode)
+	trimStringPtr(req.Notes)
 }

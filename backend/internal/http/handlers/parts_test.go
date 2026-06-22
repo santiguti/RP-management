@@ -324,16 +324,286 @@ func TestParts_DeleteIdempotent(t *testing.T) {
 	}
 }
 
+func TestMovement_CreatePurchase_OK(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Flex"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]string{
+		"movement_type": "purchase",
+		"quantity":      "5",
+	}, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusCreated, readBody(t, res))
+	}
+
+	var body struct {
+		Movement movementDTO `json:"movement"`
+	}
+	decodeJSON(t, res.Body, &body)
+	if body.Movement.MovementType != "purchase" || body.Movement.Quantity != "5.00" {
+		t.Fatalf("movement = %+v, want purchase +5.00", body.Movement)
+	}
+	updated, err := q.GetPartByID(context.Background(), part.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(updated.CurrentStock); got != "5.00" {
+		t.Fatalf("current_stock = %q, want 5.00", got)
+	}
+}
+
+func TestMovement_CreatePurchase_WithAutoTransaction(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Display"})
+	supplier := seedSupplier(t, q, "Proveedor de displays")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]any{
+		"movement_type":    "purchase",
+		"quantity":         "5",
+		"unit_cost":        "100.00",
+		"supplier_ucode":   uuidString(supplier.Ucode),
+		"link_transaction": true,
+	}, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusCreated, readBody(t, res))
+	}
+
+	var body struct {
+		Movement movementDTO `json:"movement"`
+	}
+	decodeJSON(t, res.Body, &body)
+	if body.Movement.Transaction == nil || body.Movement.Transaction.Ucode == "" {
+		t.Fatalf("movement.transaction = %+v, want linked transaction", body.Movement.Transaction)
+	}
+	if body.Movement.Supplier == nil || body.Movement.Supplier.Ucode != uuidString(supplier.Ucode) {
+		t.Fatalf("movement.supplier = %+v, want supplier", body.Movement.Supplier)
+	}
+
+	var amount pgtype.Numeric
+	var category, counterpartyType string
+	if err := testPool.QueryRow(context.Background(), `
+SELECT amount, category, counterparty_type
+FROM rp.transactions
+WHERE ucode = $1 AND voided_ts IS NULL
+`, body.Movement.Transaction.Ucode).Scan(&amount, &category, &counterpartyType); err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(amount); got != "500.00" || category != "part_purchase" || counterpartyType != "supplier" {
+		t.Fatalf("transaction = amount %q category %q counterparty %q, want 500.00/part_purchase/supplier", got, category, counterpartyType)
+	}
+}
+
+func TestMovement_AdjustmentIn_OK(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]any{
+		"movement_type":  "adjustment",
+		"quantity":       "3",
+		"adjustment_out": false,
+	}, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusCreated, readBody(t, res))
+	}
+	updated, err := q.GetPartByID(context.Background(), part.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(updated.CurrentStock); got != "3.00" {
+		t.Fatalf("current_stock = %q, want 3.00", got)
+	}
+}
+
+func TestMovement_AdjustmentOut_OK(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	insertPartMovement(t, part.ID, "purchase", "5.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]any{
+		"movement_type":  "adjustment",
+		"quantity":       "2",
+		"adjustment_out": true,
+	}, csrf)
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusCreated, readBody(t, res))
+	}
+	updated, err := q.GetPartByID(context.Background(), part.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := partNumericToString(updated.CurrentStock); got != "3.00" {
+		t.Fatalf("current_stock = %q, want 3.00", got)
+	}
+}
+
+func TestMovement_AdjustmentOut_InsufficientStock_400(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	insertPartMovement(t, part.ID, "purchase", "1.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]any{
+		"movement_type":  "adjustment",
+		"quantity":       "5",
+		"adjustment_out": true,
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "insufficient_stock")
+}
+
+func TestMovement_RejectsUseFromManualEndpoint_400(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]string{
+		"movement_type": "use",
+		"quantity":      "1",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "use_movements_via_work_order_only")
+}
+
+func TestMovement_RejectsZeroQuantity_400(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]string{
+		"movement_type": "purchase",
+		"quantity":      "0",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "invalid_body")
+}
+
+func TestMovement_List_OrdersByCreatedDesc(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	first := insertPartMovement(t, part.ID, "purchase", "1.00")
+	second := insertPartMovement(t, part.ID, "return", "2.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	res, err := client.Get(ts.URL + "/api/v1/parts/" + uuidString(part.Ucode) + "/movements")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusOK, readBody(t, res))
+	}
+	body := decodeMovementSearch(t, res)
+	if len(body.Movements) != 2 || body.Movements[0].Ucode != uuidString(second.Ucode) || body.Movements[1].Ucode != uuidString(first.Ucode) {
+		t.Fatalf("movements = %+v, want newest first", body.Movements)
+	}
+}
+
+func TestMovement_ListPagination(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	first := insertPartMovement(t, part.ID, "purchase", "1.00")
+	insertPartMovement(t, part.ID, "return", "2.00")
+	insertPartMovement(t, part.ID, "purchase", "3.00")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	res, err := client.Get(ts.URL + "/api/v1/parts/" + uuidString(part.Ucode) + "/movements?page=2&page_size=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body := decodeMovementSearch(t, res)
+	if body.Total != 3 || body.Page != 2 || body.PageSize != 1 || len(body.Movements) != 1 || body.Movements[0].Quantity != "2.00" {
+		t.Fatalf("movement page = %+v, want second newest row", body)
+	}
+	if body.Movements[0].Ucode == uuidString(first.Ucode) {
+		t.Fatalf("movement = %+v, want second newest row", body.Movements[0])
+	}
+}
+
+func TestMovement_ListExcludesVoided(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Conector"})
+	voided := insertPartMovement(t, part.ID, "purchase", "1.00")
+	live := insertPartMovement(t, part.ID, "return", "2.00")
+	if err := q.SoftDeletePartMovement(context.Background(), sqlc.SoftDeletePartMovementParams{ID: voided.ID}); err != nil {
+		t.Fatal(err)
+	}
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	res, err := client.Get(ts.URL + "/api/v1/parts/" + uuidString(part.Ucode) + "/movements")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	body := decodeMovementSearch(t, res)
+	if len(body.Movements) != 1 || body.Movements[0].Ucode != uuidString(live.Ucode) {
+		t.Fatalf("movements = %+v, want only live movement", body.Movements)
+	}
+}
+
 type partSeed struct {
 	Name         string
 	Sku          string
+	Unit         string
 	ReorderLevel string
+	DefaultCost  string
 }
 
 func seedPart(t *testing.T, q *sqlc.Queries, seed partSeed) sqlc.Part {
 	t.Helper()
 	if seed.Name == "" {
 		seed.Name = "Repuesto"
+	}
+	if seed.Unit == "" {
+		seed.Unit = "unidad"
 	}
 	var sku pgtype.Text
 	if seed.Sku != "" {
@@ -342,8 +612,9 @@ func seedPart(t *testing.T, q *sqlc.Queries, seed partSeed) sqlc.Part {
 	part, err := q.CreatePart(context.Background(), sqlc.CreatePartParams{
 		Sku:             sku,
 		Name:            seed.Name,
-		Unit:            "unidad",
+		Unit:            seed.Unit,
 		ReorderLevel:    optionalTestNumeric(t, seed.ReorderLevel),
+		DefaultCost:     optionalTestNumeric(t, seed.DefaultCost),
 		CreatedByUserID: pgtype.Int8{},
 	})
 	if err != nil {
@@ -352,15 +623,17 @@ func seedPart(t *testing.T, q *sqlc.Queries, seed partSeed) sqlc.Part {
 	return part
 }
 
-func insertPartMovement(t *testing.T, partID int64, movementType, quantity string) {
+func insertPartMovement(t *testing.T, partID int64, movementType, quantity string) sqlc.PartMovement {
 	t.Helper()
-	_, err := testPool.Exec(context.Background(), `
-INSERT INTO rp.part_movements (part_id, movement_type, quantity)
-VALUES ($1, $2, $3)
-`, partID, movementType, quantity)
+	partMovement, err := sqlc.New(testPool).CreatePartMovement(context.Background(), sqlc.CreatePartMovementParams{
+		PartID:       partID,
+		MovementType: movementType,
+		Quantity:     optionalTestNumeric(t, quantity),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	return partMovement
 }
 
 func optionalTestNumeric(t *testing.T, raw string) pgtype.Numeric {
@@ -395,4 +668,18 @@ func partNames(items []partDTO) []string {
 		names = append(names, item.Name)
 	}
 	return names
+}
+
+type movementSearchBody struct {
+	Movements []movementDTO `json:"movements"`
+	Total     int64         `json:"total"`
+	Page      int           `json:"page"`
+	PageSize  int           `json:"page_size"`
+}
+
+func decodeMovementSearch(t *testing.T, res *http.Response) movementSearchBody {
+	t.Helper()
+	var body movementSearchBody
+	decodeJSON(t, res.Body, &body)
+	return body
 }

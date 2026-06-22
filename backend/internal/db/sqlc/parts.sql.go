@@ -11,6 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPartMovements = `-- name: CountPartMovements :one
+SELECT count(*)::bigint
+FROM rp.part_movements
+WHERE part_id = $1 AND voided_ts IS NULL
+`
+
+func (q *Queries) CountPartMovements(ctx context.Context, partID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countPartMovements, partID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countParts = `-- name: CountParts :one
 SELECT count(*)::bigint
 FROM rp.parts
@@ -82,6 +95,58 @@ func (q *Queries) CreatePart(ctx context.Context, arg CreatePartParams) (Part, e
 	return i, err
 }
 
+const createPartMovement = `-- name: CreatePartMovement :one
+INSERT INTO rp.part_movements (
+  part_id, movement_type, quantity, unit_cost,
+  supplier_id, work_order_id, transaction_id, notes, created_by_user_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, part_id, movement_type, quantity, unit_cost, supplier_id, work_order_id, transaction_id, notes
+`
+
+type CreatePartMovementParams struct {
+	PartID          int64          `json:"part_id"`
+	MovementType    string         `json:"movement_type"`
+	Quantity        pgtype.Numeric `json:"quantity"`
+	UnitCost        pgtype.Numeric `json:"unit_cost"`
+	SupplierID      pgtype.Int8    `json:"supplier_id"`
+	WorkOrderID     pgtype.Int8    `json:"work_order_id"`
+	TransactionID   pgtype.Int8    `json:"transaction_id"`
+	Notes           pgtype.Text    `json:"notes"`
+	CreatedByUserID pgtype.Int8    `json:"created_by_user_id"`
+}
+
+func (q *Queries) CreatePartMovement(ctx context.Context, arg CreatePartMovementParams) (PartMovement, error) {
+	row := q.db.QueryRow(ctx, createPartMovement,
+		arg.PartID,
+		arg.MovementType,
+		arg.Quantity,
+		arg.UnitCost,
+		arg.SupplierID,
+		arg.WorkOrderID,
+		arg.TransactionID,
+		arg.Notes,
+		arg.CreatedByUserID,
+	)
+	var i PartMovement
+	err := row.Scan(
+		&i.ID,
+		&i.Ucode,
+		&i.CreatedTs,
+		&i.CreatedByUserID,
+		&i.VoidedTs,
+		&i.VoidedByUserID,
+		&i.PartID,
+		&i.MovementType,
+		&i.Quantity,
+		&i.UnitCost,
+		&i.SupplierID,
+		&i.WorkOrderID,
+		&i.TransactionID,
+		&i.Notes,
+	)
+	return i, err
+}
+
 const getPartByID = `-- name: GetPartByID :one
 SELECT id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, sku, name, description, unit, current_stock, reorder_level, default_cost, default_sale_price FROM rp.parts WHERE id = $1 AND voided_ts IS NULL
 `
@@ -132,6 +197,127 @@ func (q *Queries) GetPartByUcode(ctx context.Context, ucode pgtype.UUID) (Part, 
 		&i.DefaultSalePrice,
 	)
 	return i, err
+}
+
+const getPartMovementByUcode = `-- name: GetPartMovementByUcode :one
+SELECT
+  m.id, m.ucode, m.created_ts, m.created_by_user_id, m.voided_ts, m.voided_by_user_id, m.part_id, m.movement_type, m.quantity, m.unit_cost, m.supplier_id, m.work_order_id, m.transaction_id, m.notes,
+  s.ucode AS supplier_ucode, s.name AS supplier_name,
+  wo.ucode AS work_order_ucode, wo.wo_number AS work_order_number,
+  t.ucode AS transaction_ucode
+FROM rp.part_movements m
+LEFT JOIN rp.suppliers s ON s.id = m.supplier_id
+LEFT JOIN rp.work_orders wo ON wo.id = m.work_order_id
+LEFT JOIN rp.transactions t ON t.id = m.transaction_id
+WHERE m.ucode = $1
+  AND m.voided_ts IS NULL
+`
+
+type GetPartMovementByUcodeRow struct {
+	PartMovement     PartMovement `json:"part_movement"`
+	SupplierUcode    pgtype.UUID  `json:"supplier_ucode"`
+	SupplierName     pgtype.Text  `json:"supplier_name"`
+	WorkOrderUcode   pgtype.UUID  `json:"work_order_ucode"`
+	WorkOrderNumber  pgtype.Text  `json:"work_order_number"`
+	TransactionUcode pgtype.UUID  `json:"transaction_ucode"`
+}
+
+func (q *Queries) GetPartMovementByUcode(ctx context.Context, ucode pgtype.UUID) (GetPartMovementByUcodeRow, error) {
+	row := q.db.QueryRow(ctx, getPartMovementByUcode, ucode)
+	var i GetPartMovementByUcodeRow
+	err := row.Scan(
+		&i.PartMovement.ID,
+		&i.PartMovement.Ucode,
+		&i.PartMovement.CreatedTs,
+		&i.PartMovement.CreatedByUserID,
+		&i.PartMovement.VoidedTs,
+		&i.PartMovement.VoidedByUserID,
+		&i.PartMovement.PartID,
+		&i.PartMovement.MovementType,
+		&i.PartMovement.Quantity,
+		&i.PartMovement.UnitCost,
+		&i.PartMovement.SupplierID,
+		&i.PartMovement.WorkOrderID,
+		&i.PartMovement.TransactionID,
+		&i.PartMovement.Notes,
+		&i.SupplierUcode,
+		&i.SupplierName,
+		&i.WorkOrderUcode,
+		&i.WorkOrderNumber,
+		&i.TransactionUcode,
+	)
+	return i, err
+}
+
+const listPartMovements = `-- name: ListPartMovements :many
+SELECT
+  m.id, m.ucode, m.created_ts, m.created_by_user_id, m.voided_ts, m.voided_by_user_id, m.part_id, m.movement_type, m.quantity, m.unit_cost, m.supplier_id, m.work_order_id, m.transaction_id, m.notes,
+  s.ucode AS supplier_ucode, s.name AS supplier_name,
+  wo.ucode AS work_order_ucode, wo.wo_number AS work_order_number,
+  t.ucode AS transaction_ucode
+FROM rp.part_movements m
+LEFT JOIN rp.suppliers s ON s.id = m.supplier_id
+LEFT JOIN rp.work_orders wo ON wo.id = m.work_order_id
+LEFT JOIN rp.transactions t ON t.id = m.transaction_id
+WHERE m.part_id = $1
+  AND m.voided_ts IS NULL
+ORDER BY m.created_ts DESC, m.id DESC
+LIMIT $3::int OFFSET $2::int
+`
+
+type ListPartMovementsParams struct {
+	PartID     int64 `json:"part_id"`
+	PageOffset int32 `json:"page_offset"`
+	PageSize   int32 `json:"page_size"`
+}
+
+type ListPartMovementsRow struct {
+	PartMovement     PartMovement `json:"part_movement"`
+	SupplierUcode    pgtype.UUID  `json:"supplier_ucode"`
+	SupplierName     pgtype.Text  `json:"supplier_name"`
+	WorkOrderUcode   pgtype.UUID  `json:"work_order_ucode"`
+	WorkOrderNumber  pgtype.Text  `json:"work_order_number"`
+	TransactionUcode pgtype.UUID  `json:"transaction_ucode"`
+}
+
+func (q *Queries) ListPartMovements(ctx context.Context, arg ListPartMovementsParams) ([]ListPartMovementsRow, error) {
+	rows, err := q.db.Query(ctx, listPartMovements, arg.PartID, arg.PageOffset, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPartMovementsRow{}
+	for rows.Next() {
+		var i ListPartMovementsRow
+		if err := rows.Scan(
+			&i.PartMovement.ID,
+			&i.PartMovement.Ucode,
+			&i.PartMovement.CreatedTs,
+			&i.PartMovement.CreatedByUserID,
+			&i.PartMovement.VoidedTs,
+			&i.PartMovement.VoidedByUserID,
+			&i.PartMovement.PartID,
+			&i.PartMovement.MovementType,
+			&i.PartMovement.Quantity,
+			&i.PartMovement.UnitCost,
+			&i.PartMovement.SupplierID,
+			&i.PartMovement.WorkOrderID,
+			&i.PartMovement.TransactionID,
+			&i.PartMovement.Notes,
+			&i.SupplierUcode,
+			&i.SupplierName,
+			&i.WorkOrderUcode,
+			&i.WorkOrderNumber,
+			&i.TransactionUcode,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const searchParts = `-- name: SearchParts :many
@@ -206,6 +392,21 @@ type SoftDeletePartParams struct {
 
 func (q *Queries) SoftDeletePart(ctx context.Context, arg SoftDeletePartParams) error {
 	_, err := q.db.Exec(ctx, softDeletePart, arg.ID, arg.VoidedByUserID)
+	return err
+}
+
+const softDeletePartMovement = `-- name: SoftDeletePartMovement :exec
+UPDATE rp.part_movements SET voided_ts = now(), voided_by_user_id = $2
+WHERE id = $1 AND voided_ts IS NULL
+`
+
+type SoftDeletePartMovementParams struct {
+	ID             int64       `json:"id"`
+	VoidedByUserID pgtype.Int8 `json:"voided_by_user_id"`
+}
+
+func (q *Queries) SoftDeletePartMovement(ctx context.Context, arg SoftDeletePartMovementParams) error {
+	_, err := q.db.Exec(ctx, softDeletePartMovement, arg.ID, arg.VoidedByUserID)
 	return err
 }
 

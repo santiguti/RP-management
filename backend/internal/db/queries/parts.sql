@@ -41,3 +41,47 @@ RETURNING *;
 -- name: SoftDeletePart :exec
 UPDATE rp.parts SET voided_ts = now(), voided_by_user_id = $2
 WHERE id = $1 AND voided_ts IS NULL;
+
+-- name: CreatePartMovement :one
+INSERT INTO rp.part_movements (
+  part_id, movement_type, quantity, unit_cost,
+  supplier_id, work_order_id, transaction_id, notes, created_by_user_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *;
+
+-- name: GetPartMovementByUcode :one
+SELECT
+  sqlc.embed(m),
+  s.ucode AS supplier_ucode, s.name AS supplier_name,
+  wo.ucode AS work_order_ucode, wo.wo_number AS work_order_number,
+  t.ucode AS transaction_ucode
+FROM rp.part_movements m
+LEFT JOIN rp.suppliers s ON s.id = m.supplier_id
+LEFT JOIN rp.work_orders wo ON wo.id = m.work_order_id
+LEFT JOIN rp.transactions t ON t.id = m.transaction_id
+WHERE m.ucode = $1
+  AND m.voided_ts IS NULL;
+
+-- name: ListPartMovements :many
+SELECT
+  sqlc.embed(m),
+  s.ucode AS supplier_ucode, s.name AS supplier_name,
+  wo.ucode AS work_order_ucode, wo.wo_number AS work_order_number,
+  t.ucode AS transaction_ucode
+FROM rp.part_movements m
+LEFT JOIN rp.suppliers s ON s.id = m.supplier_id
+LEFT JOIN rp.work_orders wo ON wo.id = m.work_order_id
+LEFT JOIN rp.transactions t ON t.id = m.transaction_id
+WHERE m.part_id = $1
+  AND m.voided_ts IS NULL
+ORDER BY m.created_ts DESC, m.id DESC
+LIMIT sqlc.arg(page_size)::int OFFSET sqlc.arg(page_offset)::int;
+
+-- name: CountPartMovements :one
+SELECT count(*)::bigint
+FROM rp.part_movements
+WHERE part_id = $1 AND voided_ts IS NULL;
+
+-- name: SoftDeletePartMovement :exec
+UPDATE rp.part_movements SET voided_ts = now(), voided_by_user_id = $2
+WHERE id = $1 AND voided_ts IS NULL;
