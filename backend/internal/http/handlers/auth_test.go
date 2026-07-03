@@ -267,6 +267,7 @@ func testRouter(q *sqlc.Queries) http.Handler {
 	partsH := NewParts(q, testPool)
 	attachmentsH := NewAttachments(q, testAttachmentStore)
 	auditH := NewAudit(q)
+	importH := NewImport(testPool, q)
 	brandsH := NewBrands(q)
 	modelsH := NewDeviceModels(q)
 	typesH := NewArticleTypes(q)
@@ -345,6 +346,10 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				ar.Use(middleware.RequireRole("owner"))
 				ar.Get("/audit-log", auditH.List)
 				ar.Get("/audit-log/", auditH.List)
+			})
+			pr.Route("/import", func(ir chi.Router) {
+				ir.Use(middleware.RequireRole("owner"))
+				ir.Post("/excel", importH.Excel)
 			})
 			pr.Route("/suppliers", func(sr chi.Router) {
 				sr.Get("/", suppliersH.List)

@@ -196,7 +196,7 @@ func parseAuditTime(w http.ResponseWriter, raw string) (pgtype.Timestamptz, bool
 
 func isKnownAuditEntityType(value string) bool {
 	switch value {
-	case "client", "supplier", "work_order", "transaction", "recurring_expense", "part", "part_movement", "attachment", "auth", "user", "work_order_part":
+	case "client", "supplier", "work_order", "transaction", "recurring_expense", "part", "part_movement", "attachment", "auth", "user", "work_order_part", "import":
 		return true
 	default:
 		return false

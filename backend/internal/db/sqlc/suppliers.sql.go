@@ -55,6 +55,31 @@ func (q *Queries) CreateSupplier(ctx context.Context, arg CreateSupplierParams) 
 	return i, err
 }
 
+const getSupplierByName = `-- name: GetSupplierByName :one
+SELECT id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, name, phone, email, notes
+FROM rp.suppliers
+WHERE lower(name) = lower($1)
+  AND voided_ts IS NULL
+`
+
+func (q *Queries) GetSupplierByName(ctx context.Context, lower string) (Supplier, error) {
+	row := q.db.QueryRow(ctx, getSupplierByName, lower)
+	var i Supplier
+	err := row.Scan(
+		&i.ID,
+		&i.Ucode,
+		&i.CreatedTs,
+		&i.CreatedByUserID,
+		&i.VoidedTs,
+		&i.VoidedByUserID,
+		&i.Name,
+		&i.Phone,
+		&i.Email,
+		&i.Notes,
+	)
+	return i, err
+}
+
 const getSupplierByUcode = `-- name: GetSupplierByUcode :one
 SELECT id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, name, phone, email, notes
 FROM rp.suppliers

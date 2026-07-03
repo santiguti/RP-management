@@ -14,6 +14,7 @@ import (
 var errInvalidDecimal = errors.New("invalid decimal")
 
 type ParsedTransaction struct {
+	Row              int     `json:"-"`
 	TransactionType  string  `json:"transaction_type"`
 	Amount           string  `json:"amount"`
 	Currency         string  `json:"currency"`
@@ -47,6 +48,7 @@ func parseTransactions(f *excelize.File) (Result, error) {
 		rowNum := ri + 1
 
 		tx := ParsedTransaction{
+			Row:              rowNum,
 			TransactionType:  cellAt(row, hm, "transaction_type"),
 			Amount:           cellAt(row, hm, "amount"),
 			Currency:         strings.ToUpper(cellAt(row, hm, "currency")),

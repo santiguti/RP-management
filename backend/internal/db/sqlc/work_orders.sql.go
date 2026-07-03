@@ -170,6 +170,51 @@ func (q *Queries) CreateWorkOrderPart(ctx context.Context, arg CreateWorkOrderPa
 	return i, err
 }
 
+const getWorkOrderByNumber = `-- name: GetWorkOrderByNumber :one
+SELECT id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, wo_number, device_id, client_id, service_type, status, reported_issue, diagnosis, quote_amount, quote_currency, quote_sent_ts, quote_approved_ts, quote_rejected_ts, final_amount, labor_amount, parts_amount, intake_notes, accessories, device_pin_encrypted, received_ts, started_ts, ready_ts, delivered_ts, cancelled_ts, cancel_reason
+FROM rp.work_orders
+WHERE wo_number = $1
+  AND voided_ts IS NULL
+`
+
+func (q *Queries) GetWorkOrderByNumber(ctx context.Context, woNumber string) (WorkOrder, error) {
+	row := q.db.QueryRow(ctx, getWorkOrderByNumber, woNumber)
+	var i WorkOrder
+	err := row.Scan(
+		&i.ID,
+		&i.Ucode,
+		&i.CreatedTs,
+		&i.CreatedByUserID,
+		&i.VoidedTs,
+		&i.VoidedByUserID,
+		&i.WoNumber,
+		&i.DeviceID,
+		&i.ClientID,
+		&i.ServiceType,
+		&i.Status,
+		&i.ReportedIssue,
+		&i.Diagnosis,
+		&i.QuoteAmount,
+		&i.QuoteCurrency,
+		&i.QuoteSentTs,
+		&i.QuoteApprovedTs,
+		&i.QuoteRejectedTs,
+		&i.FinalAmount,
+		&i.LaborAmount,
+		&i.PartsAmount,
+		&i.IntakeNotes,
+		&i.Accessories,
+		&i.DevicePinEncrypted,
+		&i.ReceivedTs,
+		&i.StartedTs,
+		&i.ReadyTs,
+		&i.DeliveredTs,
+		&i.CancelledTs,
+		&i.CancelReason,
+	)
+	return i, err
+}
+
 const getWorkOrderByUcode = `-- name: GetWorkOrderByUcode :one
 SELECT
   wo.id, wo.ucode, wo.created_ts, wo.created_by_user_id, wo.voided_ts, wo.voided_by_user_id, wo.wo_number, wo.device_id, wo.client_id, wo.service_type, wo.status, wo.reported_issue, wo.diagnosis, wo.quote_amount, wo.quote_currency, wo.quote_sent_ts, wo.quote_approved_ts, wo.quote_rejected_ts, wo.final_amount, wo.labor_amount, wo.parts_amount, wo.intake_notes, wo.accessories, wo.device_pin_encrypted, wo.received_ts, wo.started_ts, wo.ready_ts, wo.delivered_ts, wo.cancelled_ts, wo.cancel_reason,

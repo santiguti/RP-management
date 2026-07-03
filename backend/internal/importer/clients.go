@@ -11,6 +11,7 @@ import (
 )
 
 type ParsedClient struct {
+	Row        int     `json:"-"`
 	Name       string  `json:"name"`
 	Phone      *string `json:"phone,omitempty"`
 	Email      *string `json:"email,omitempty"`
@@ -40,6 +41,7 @@ func parseClients(f *excelize.File) (Result, error) {
 		rowNum := ri + 1
 
 		client := ParsedClient{
+			Row:        rowNum,
 			Name:       cellAt(row, hm, "name"),
 			Phone:      strPtrOrNil(cellAt(row, hm, "phone")),
 			Email:      strPtrOrNil(cellAt(row, hm, "email")),

@@ -10,6 +10,7 @@ import (
 )
 
 type ParsedPart struct {
+	Row              int     `json:"-"`
 	Name             string  `json:"name"`
 	Sku              *string `json:"sku,omitempty"`
 	Unit             string  `json:"unit"`
@@ -38,6 +39,7 @@ func parseParts(f *excelize.File) (Result, error) {
 		rowNum := ri + 1
 
 		part := ParsedPart{
+			Row:              rowNum,
 			Name:             cellAt(row, hm, "name"),
 			Sku:              strPtrOrNil(cellAt(row, hm, "sku")),
 			Unit:             cellAt(row, hm, "unit"),

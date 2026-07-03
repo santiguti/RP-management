@@ -10,6 +10,12 @@ FROM rp.suppliers
 WHERE ucode = $1
   AND voided_ts IS NULL;
 
+-- name: GetSupplierByName :one
+SELECT *
+FROM rp.suppliers
+WHERE lower(name) = lower($1)
+  AND voided_ts IS NULL;
+
 -- name: CreateSupplier :one
 INSERT INTO rp.suppliers (
   name,

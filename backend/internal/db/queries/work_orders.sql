@@ -35,6 +35,12 @@ JOIN rp.article_types at      ON at.id = d.article_type_id
 WHERE wo.ucode = $1
   AND wo.voided_ts IS NULL;
 
+-- name: GetWorkOrderByNumber :one
+SELECT *
+FROM rp.work_orders
+WHERE wo_number = $1
+  AND voided_ts IS NULL;
+
 -- name: ListWorkOrders :many
 SELECT
   sqlc.embed(wo),
