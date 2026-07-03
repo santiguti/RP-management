@@ -35,6 +35,7 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 	reportsH := handlers.NewReports(queries)
 	partsH := handlers.NewParts(queries, pool)
 	attachmentsH := handlers.NewAttachments(queries, store)
+	auditH := handlers.NewAudit(queries)
 	brandsH := handlers.NewBrands(queries)
 	modelsH := handlers.NewDeviceModels(queries)
 	typesH := handlers.NewArticleTypes(queries)
@@ -122,6 +123,11 @@ func New(cfg config.Config, pool *pgxpool.Pool) http.Handler {
 				rr.Get("/balance", reportsH.Balance)
 				rr.Get("/pnl", reportsH.PnL)
 				rr.Get("/dashboard", reportsH.Dashboard)
+			})
+			pr.Group(func(ar chi.Router) {
+				ar.Use(middleware.RequireRole("owner"))
+				ar.Get("/audit-log", auditH.List)
+				ar.Get("/audit-log/", auditH.List)
 			})
 			pr.Route("/suppliers", func(sr chi.Router) {
 				sr.Get("/", suppliersH.List)

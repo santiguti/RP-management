@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	partdomain "github.com/santiguti/rp-management/backend/internal/domain/parts"
@@ -146,7 +147,15 @@ func (p *Parts) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]partDTO{"part": toPartDTO(created)})
+	dto := toPartDTO(created)
+	audit.Record(r.Context(), p.queries, r, audit.Entry{
+		Action:      "part.create",
+		EntityType:  "part",
+		EntityID:    &created.ID,
+		EntityUcode: &created.Ucode,
+		After:       dto,
+	})
+	writeJSON(w, http.StatusCreated, map[string]partDTO{"part": dto})
 }
 
 func (p *Parts) Search(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +250,7 @@ func (p *Parts) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	beforeDTO := toPartDTO(current)
 	out, err := p.queries.UpdatePart(r.Context(), params)
 	if isUniqueViolation(err) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "already_exists"})
@@ -255,7 +265,16 @@ func (p *Parts) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]partDTO{"part": toPartDTO(out)})
+	afterDTO := toPartDTO(out)
+	audit.Record(r.Context(), p.queries, r, audit.Entry{
+		Action:      "part.update",
+		EntityType:  "part",
+		EntityID:    &out.ID,
+		EntityUcode: &out.Ucode,
+		Before:      beforeDTO,
+		After:       afterDTO,
+	})
+	writeJSON(w, http.StatusOK, map[string]partDTO{"part": afterDTO})
 }
 
 func (p *Parts) Delete(w http.ResponseWriter, r *http.Request) {
@@ -282,6 +301,13 @@ func (p *Parts) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	audit.Record(r.Context(), p.queries, r, audit.Entry{
+		Action:      "part.delete",
+		EntityType:  "part",
+		EntityID:    &part.ID,
+		EntityUcode: &part.Ucode,
+		Before:      toPartDTO(part),
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -364,7 +390,15 @@ func (p *Parts) CreateMovement(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]movementDTO{"movement": movementDTOFrom(row.PartMovement, row.SupplierUcode, row.SupplierName, row.WorkOrderUcode, row.WorkOrderNumber, row.TransactionUcode)})
+	dto := movementDTOFrom(row.PartMovement, row.SupplierUcode, row.SupplierName, row.WorkOrderUcode, row.WorkOrderNumber, row.TransactionUcode)
+	audit.Record(r.Context(), p.queries, r, audit.Entry{
+		Action:      "part.movement",
+		EntityType:  "part_movement",
+		EntityID:    &row.PartMovement.ID,
+		EntityUcode: &row.PartMovement.Ucode,
+		After:       dto,
+	})
+	writeJSON(w, http.StatusCreated, map[string]movementDTO{"movement": dto})
 }
 
 func (p *Parts) ListMovements(w http.ResponseWriter, r *http.Request) {

@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	recurringdomain "github.com/santiguti/rp-management/backend/internal/domain/recurring"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
@@ -139,7 +140,15 @@ func (re *RecurringExpenses) Create(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusCreated, map[string]recurringExpenseDTO{"recurring_expense": toRecurringExpenseDTO(row)})
+	dto := toRecurringExpenseDTO(row)
+	audit.Record(r.Context(), re.queries, r, audit.Entry{
+		Action:      "recurring.create",
+		EntityType:  "recurring_expense",
+		EntityID:    &row.recurringExpense.ID,
+		EntityUcode: &row.recurringExpense.Ucode,
+		After:       dto,
+	})
+	writeJSON(rw, http.StatusCreated, map[string]recurringExpenseDTO{"recurring_expense": dto})
 }
 
 func (re *RecurringExpenses) Get(rw http.ResponseWriter, r *http.Request) {
@@ -223,6 +232,7 @@ func (re *RecurringExpenses) Update(rw http.ResponseWriter, r *http.Request) {
 		params.Active = *req.Active
 	}
 
+	beforeDTO := toRecurringExpenseDTO(current)
 	out, err := re.queries.UpdateRecurringExpense(r.Context(), params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -237,7 +247,16 @@ func (re *RecurringExpenses) Update(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]recurringExpenseDTO{"recurring_expense": toRecurringExpenseDTO(row)})
+	afterDTO := toRecurringExpenseDTO(row)
+	audit.Record(r.Context(), re.queries, r, audit.Entry{
+		Action:      "recurring.update",
+		EntityType:  "recurring_expense",
+		EntityID:    &row.recurringExpense.ID,
+		EntityUcode: &row.recurringExpense.Ucode,
+		Before:      beforeDTO,
+		After:       afterDTO,
+	})
+	writeJSON(rw, http.StatusOK, map[string]recurringExpenseDTO{"recurring_expense": afterDTO})
 }
 
 func (re *RecurringExpenses) Delete(rw http.ResponseWriter, r *http.Request) {
@@ -264,6 +283,14 @@ func (re *RecurringExpenses) Delete(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	before := toRecurringExpenseDTO(enrichedFromGetRecurring(current))
+	audit.Record(r.Context(), re.queries, r, audit.Entry{
+		Action:      "recurring.delete",
+		EntityType:  "recurring_expense",
+		EntityID:    &current.RecurringExpense.ID,
+		EntityUcode: &current.RecurringExpense.Ucode,
+		Before:      before,
+	})
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -295,7 +322,17 @@ func (re *RecurringExpenses) RunNow(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]transactionDTO{"transaction": toTransactionDTO(enrichedFromGetTransaction(row))})
+	dto := toTransactionDTO(enrichedFromGetTransaction(row))
+	audit.Record(r.Context(), re.queries, r, audit.Entry{
+		Action:      "recurring.run_now",
+		EntityType:  "recurring_expense",
+		EntityID:    &current.recurringExpense.ID,
+		EntityUcode: &current.recurringExpense.Ucode,
+		After: map[string]string{
+			"transaction_ucode": uuidString(row.Transaction.Ucode),
+		},
+	})
+	writeJSON(rw, http.StatusOK, map[string]transactionDTO{"transaction": dto})
 }
 
 func (re *RecurringExpenses) resolveOptionalSupplier(rw http.ResponseWriter, r *http.Request, raw *string) (pgtype.Int8, bool) {

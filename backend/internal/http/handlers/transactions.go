@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
@@ -163,7 +164,15 @@ func (t *Transactions) Create(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusCreated, map[string]transactionDTO{"transaction": toTransactionDTO(row)})
+	dto := toTransactionDTO(row)
+	audit.Record(r.Context(), t.queries, r, audit.Entry{
+		Action:      "transaction.create",
+		EntityType:  "transaction",
+		EntityID:    &row.transaction.ID,
+		EntityUcode: &row.transaction.Ucode,
+		After:       dto,
+	})
+	writeJSON(rw, http.StatusCreated, map[string]transactionDTO{"transaction": dto})
 }
 
 func (t *Transactions) Search(rw http.ResponseWriter, r *http.Request) {
@@ -252,6 +261,7 @@ func (t *Transactions) Update(rw http.ResponseWriter, r *http.Request) {
 		params.Description = textFromPtr(req.Description)
 	}
 
+	beforeDTO := toTransactionDTO(current)
 	out, err := t.queries.UpdateTransaction(r.Context(), params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -266,7 +276,16 @@ func (t *Transactions) Update(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]transactionDTO{"transaction": toTransactionDTO(row)})
+	afterDTO := toTransactionDTO(row)
+	audit.Record(r.Context(), t.queries, r, audit.Entry{
+		Action:      "transaction.update",
+		EntityType:  "transaction",
+		EntityID:    &row.transaction.ID,
+		EntityUcode: &row.transaction.Ucode,
+		Before:      beforeDTO,
+		After:       afterDTO,
+	})
+	writeJSON(rw, http.StatusOK, map[string]transactionDTO{"transaction": afterDTO})
 }
 
 func (t *Transactions) Delete(rw http.ResponseWriter, r *http.Request) {
@@ -293,6 +312,14 @@ func (t *Transactions) Delete(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	currentDTO := toTransactionDTO(enrichedFromGetTransaction(current))
+	audit.Record(r.Context(), t.queries, r, audit.Entry{
+		Action:      "transaction.delete",
+		EntityType:  "transaction",
+		EntityID:    &current.Transaction.ID,
+		EntityUcode: &current.Transaction.Ucode,
+		Before:      currentDTO,
+	})
 	rw.WriteHeader(http.StatusNoContent)
 }
 

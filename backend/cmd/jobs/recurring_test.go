@@ -116,6 +116,7 @@ func resetJobsTestDB(t *testing.T) *sqlc.Queries {
 	t.Helper()
 	_, err := testPool.Exec(context.Background(), `
 TRUNCATE
+  rp.audit_log,
   rp.sessions,
   rp.attachments,
   rp.work_order_parts,

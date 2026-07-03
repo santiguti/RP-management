@@ -33,3 +33,4 @@ sql:
           rp_part_movement: "PartMovement"
           rp_work_order_part: "WorkOrderPart"
           rp_attachment: "Attachment"
+          rp_audit_log: "AuditLog"

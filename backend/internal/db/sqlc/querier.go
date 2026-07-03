@@ -11,6 +11,7 @@ import (
 )
 
 type Querier interface {
+	CountAuditEntries(ctx context.Context, arg CountAuditEntriesParams) (int64, error)
 	CountClients(ctx context.Context, q_ string) (int64, error)
 	CountPartMovements(ctx context.Context, partID int64) (int64, error)
 	CountParts(ctx context.Context, arg CountPartsParams) (int64, error)
@@ -18,6 +19,7 @@ type Querier interface {
 	CountWorkOrders(ctx context.Context, arg CountWorkOrdersParams) (int64, error)
 	CreateArticleType(ctx context.Context, arg CreateArticleTypeParams) (ArticleType, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
+	CreateAuditEntry(ctx context.Context, arg CreateAuditEntryParams) (AuditLog, error)
 	CreateBrand(ctx context.Context, arg CreateBrandParams) (Brand, error)
 	CreateClient(ctx context.Context, arg CreateClientParams) (Client, error)
 	CreateDevice(ctx context.Context, arg CreateDeviceParams) (Device, error)
@@ -55,6 +57,7 @@ type Querier interface {
 	GetWorkOrderByUcode(ctx context.Context, ucode pgtype.UUID) (GetWorkOrderByUcodeRow, error)
 	GetWorkOrderPartByID(ctx context.Context, id int64) (WorkOrderPart, error)
 	ListArticleTypes(ctx context.Context) ([]ArticleType, error)
+	ListAuditEntries(ctx context.Context, arg ListAuditEntriesParams) ([]ListAuditEntriesRow, error)
 	ListBrands(ctx context.Context) ([]Brand, error)
 	ListClientDevices(ctx context.Context, clientID int64) ([]ListClientDevicesRow, error)
 	ListDeviceModelsByBrand(ctx context.Context, brandID int64) ([]ListDeviceModelsByBrandRow, error)

@@ -38,6 +38,21 @@ type Attachment struct {
 	UploadedByUserID pgtype.Int8        `json:"uploaded_by_user_id"`
 }
 
+type AuditLog struct {
+	ID          int64              `json:"id"`
+	Ucode       pgtype.UUID        `json:"ucode"`
+	CreatedTs   pgtype.Timestamptz `json:"created_ts"`
+	ActorUserID pgtype.Int8        `json:"actor_user_id"`
+	Action      string             `json:"action"`
+	EntityType  string             `json:"entity_type"`
+	EntityID    pgtype.Int8        `json:"entity_id"`
+	EntityUcode pgtype.UUID        `json:"entity_ucode"`
+	BeforeJson  []byte             `json:"before_json"`
+	AfterJson   []byte             `json:"after_json"`
+	Ip          pgtype.Text        `json:"ip"`
+	UserAgent   pgtype.Text        `json:"user_agent"`
+}
+
 type Brand struct {
 	ID              int64              `json:"id"`
 	Ucode           pgtype.UUID        `json:"ucode"`

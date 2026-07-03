@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
@@ -78,7 +79,15 @@ func (s *Suppliers) Create(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]supplierDTO{"supplier": toSupplierDTO(out)})
+	dto := toSupplierDTO(out)
+	audit.Record(r.Context(), s.queries, r, audit.Entry{
+		Action:      "supplier.create",
+		EntityType:  "supplier",
+		EntityID:    &out.ID,
+		EntityUcode: &out.Ucode,
+		After:       dto,
+	})
+	writeJSON(w, http.StatusCreated, map[string]supplierDTO{"supplier": dto})
 }
 
 func (s *Suppliers) List(w http.ResponseWriter, r *http.Request) {
@@ -143,6 +152,7 @@ func (s *Suppliers) Update(w http.ResponseWriter, r *http.Request) {
 		params.Notes = textFromPtr(req.Notes)
 	}
 
+	beforeDTO := toSupplierDTO(supplier)
 	out, err := s.queries.UpdateSupplier(r.Context(), params)
 	if isUniqueViolation(err) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "already_exists"})
@@ -157,7 +167,16 @@ func (s *Suppliers) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]supplierDTO{"supplier": toSupplierDTO(out)})
+	afterDTO := toSupplierDTO(out)
+	audit.Record(r.Context(), s.queries, r, audit.Entry{
+		Action:      "supplier.update",
+		EntityType:  "supplier",
+		EntityID:    &out.ID,
+		EntityUcode: &out.Ucode,
+		Before:      beforeDTO,
+		After:       afterDTO,
+	})
+	writeJSON(w, http.StatusOK, map[string]supplierDTO{"supplier": afterDTO})
 }
 
 func (s *Suppliers) Delete(w http.ResponseWriter, r *http.Request) {
@@ -185,6 +204,13 @@ func (s *Suppliers) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	audit.Record(r.Context(), s.queries, r, audit.Entry{
+		Action:      "supplier.delete",
+		EntityType:  "supplier",
+		EntityID:    &supplier.ID,
+		EntityUcode: &supplier.Ucode,
+		Before:      toSupplierDTO(supplier),
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

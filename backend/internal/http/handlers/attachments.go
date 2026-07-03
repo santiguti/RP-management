@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 	"github.com/santiguti/rp-management/backend/internal/storage"
@@ -100,7 +101,15 @@ func (a *Attachments) Upload(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]attachmentDTO{"attachment": toAttachmentDTO(attachment)})
+	dto := toAttachmentDTO(attachment)
+	audit.Record(r.Context(), a.queries, r, audit.Entry{
+		Action:      "attachment.upload",
+		EntityType:  "attachment",
+		EntityID:    &attachment.ID,
+		EntityUcode: &attachment.Ucode,
+		After:       dto,
+	})
+	writeJSON(w, http.StatusCreated, map[string]attachmentDTO{"attachment": dto})
 }
 
 func (a *Attachments) List(w http.ResponseWriter, r *http.Request) {
@@ -161,6 +170,13 @@ func (a *Attachments) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	audit.Record(r.Context(), a.queries, r, audit.Entry{
+		Action:      "attachment.delete",
+		EntityType:  "attachment",
+		EntityID:    &attachment.ID,
+		EntityUcode: &attachment.Ucode,
+		Before:      toAttachmentDTO(attachment),
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

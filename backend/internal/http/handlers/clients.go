@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	clientdomain "github.com/santiguti/rp-management/backend/internal/domain/clients"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
@@ -104,7 +105,15 @@ func (c *Clients) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]clientDTO{"client": toClientDTO(out)})
+	dto := toClientDTO(out)
+	audit.Record(r.Context(), c.queries, r, audit.Entry{
+		Action:      "client.create",
+		EntityType:  "client",
+		EntityID:    &out.ID,
+		EntityUcode: &out.Ucode,
+		After:       dto,
+	})
+	writeJSON(w, http.StatusCreated, map[string]clientDTO{"client": dto})
 }
 
 func (c *Clients) Search(w http.ResponseWriter, r *http.Request) {
@@ -213,6 +222,7 @@ func (c *Clients) Update(w http.ResponseWriter, r *http.Request) {
 		params.ClientType = strings.TrimSpace(*req.ClientType)
 	}
 
+	beforeDTO := toClientDTO(client)
 	out, err := c.queries.UpdateClient(r.Context(), params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -223,7 +233,16 @@ func (c *Clients) Update(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]clientDTO{"client": toClientDTO(out)})
+	afterDTO := toClientDTO(out)
+	audit.Record(r.Context(), c.queries, r, audit.Entry{
+		Action:      "client.update",
+		EntityType:  "client",
+		EntityID:    &out.ID,
+		EntityUcode: &out.Ucode,
+		Before:      beforeDTO,
+		After:       afterDTO,
+	})
+	writeJSON(w, http.StatusOK, map[string]clientDTO{"client": afterDTO})
 }
 
 func (c *Clients) Delete(w http.ResponseWriter, r *http.Request) {
@@ -251,6 +270,13 @@ func (c *Clients) Delete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	audit.Record(r.Context(), c.queries, r, audit.Entry{
+		Action:      "client.delete",
+		EntityType:  "client",
+		EntityID:    &client.ID,
+		EntityUcode: &client.Ucode,
+		Before:      toClientDTO(client),
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

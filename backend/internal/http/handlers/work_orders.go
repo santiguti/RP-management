@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	partdomain "github.com/santiguti/rp-management/backend/internal/domain/parts"
@@ -170,7 +172,15 @@ func (w *WorkOrders) Intake(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusCreated, map[string]workOrderDTO{"work_order": toWorkOrderDTO(detail)})
+	dto := toWorkOrderDTO(detail)
+	audit.Record(r.Context(), w.queries, r, audit.Entry{
+		Action:      "work_order.create",
+		EntityType:  "work_order",
+		EntityID:    &detail.WorkOrder.ID,
+		EntityUcode: &detail.WorkOrder.Ucode,
+		After:       dto,
+	})
+	writeJSON(rw, http.StatusCreated, map[string]workOrderDTO{"work_order": dto})
 }
 
 func (w *WorkOrders) Search(rw http.ResponseWriter, r *http.Request) {
@@ -401,6 +411,12 @@ func (w *WorkOrders) AddPart(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	audit.Record(r.Context(), w.queries, r, audit.Entry{
+		Action:     "wo_part.add",
+		EntityType: "work_order_part",
+		EntityID:   &created.ID,
+		After:      dto,
+	})
 	writeJSON(rw, http.StatusCreated, map[string]any{
 		"work_order_part": dto,
 		"work_order": map[string]any{
@@ -456,6 +472,12 @@ func (w *WorkOrders) RemovePart(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	beforeDTO, ok := w.workOrderPartDTO(r.Context(), workOrder.WorkOrder.ID, workOrderPart.ID)
+	if !ok {
+		log.Printf("work order part %d was not found for audit", workOrderPart.ID)
+		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
 
 	user, _ := middleware.UserFromContext(r.Context())
 	tx, err := w.pool.Begin(r.Context())
@@ -489,6 +511,12 @@ func (w *WorkOrders) RemovePart(rw http.ResponseWriter, r *http.Request) {
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	audit.Record(r.Context(), w.queries, r, audit.Entry{
+		Action:     "wo_part.remove",
+		EntityType: "work_order_part",
+		EntityID:   &workOrderPart.ID,
+		Before:     beforeDTO,
+	})
 	rw.WriteHeader(http.StatusNoContent)
 }
 
@@ -541,6 +569,7 @@ func (w *WorkOrders) Update(rw http.ResponseWriter, r *http.Request) {
 		params.DevicePinEncrypted = textFromPtr(req.DevicePin)
 	}
 
+	beforeDTO := toWorkOrderDTO(current)
 	out, err := w.queries.UpdateWorkOrderFields(r.Context(), params)
 	if errors.Is(err, pgx.ErrNoRows) {
 		writeJSON(rw, http.StatusNotFound, map[string]string{"error": "not_found"})
@@ -555,7 +584,16 @@ func (w *WorkOrders) Update(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": toWorkOrderDTO(updated)})
+	afterDTO := toWorkOrderDTO(updated)
+	audit.Record(r.Context(), w.queries, r, audit.Entry{
+		Action:      "work_order.update",
+		EntityType:  "work_order",
+		EntityID:    &updated.WorkOrder.ID,
+		EntityUcode: &updated.WorkOrder.Ucode,
+		Before:      beforeDTO,
+		After:       afterDTO,
+	})
+	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": afterDTO})
 }
 
 func (w *WorkOrders) Transition(rw http.ResponseWriter, r *http.Request) {
@@ -613,6 +651,19 @@ func (w *WorkOrders) Transition(rw http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	audit.Record(r.Context(), w.queries, r, audit.Entry{
+		Action:      "wo.transition",
+		EntityType:  "work_order",
+		EntityID:    &updated.WorkOrder.ID,
+		EntityUcode: &updated.WorkOrder.Ucode,
+		Before: map[string]string{
+			"status": string(currentStatus),
+		},
+		After: map[string]string{
+			"status": string(newStatus),
+			"event":  string(event),
+		},
+	})
 	writeJSON(rw, http.StatusOK, map[string]workOrderDTO{"work_order": toWorkOrderDTO(updated)})
 }
 
@@ -850,6 +901,19 @@ func toWoPartDTO(row sqlc.ListWorkOrderPartsRow) woPartDTO {
 		Subtotal:         subtotal.FloatString(2),
 		CreatedTs:        timeString(row.WorkOrderPart.CreatedTs),
 	}
+}
+
+func (w *WorkOrders) workOrderPartDTO(ctx context.Context, workOrderID, workOrderPartID int64) (woPartDTO, bool) {
+	rows, err := w.queries.ListWorkOrderParts(ctx, workOrderID)
+	if err != nil {
+		return woPartDTO{}, false
+	}
+	for _, row := range rows {
+		if row.WorkOrderPart.ID == workOrderPartID {
+			return toWoPartDTO(row), true
+		}
+	}
+	return woPartDTO{}, false
 }
 
 func parsePositiveWoPartNumeric(rw http.ResponseWriter, raw string) (pgtype.Numeric, *big.Rat, bool) {
