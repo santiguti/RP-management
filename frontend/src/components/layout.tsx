@@ -57,6 +57,9 @@ export function AppLayout() {
               <NavLink to="/settings/recurring-expenses" className={linkClass}>
                 Ajustes · Gastos fijos
               </NavLink>
+              <NavLink to="/import" className={linkClass}>
+                Ajustes · Importar
+              </NavLink>
             </>
           ) : null}
         </nav>

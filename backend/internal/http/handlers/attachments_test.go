@@ -216,6 +216,21 @@ func TestAttachment_DeleteSoftDeletes(t *testing.T) {
 	}
 }
 
+func TestAttachments_DeleteRequiresOwner(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	owner := seedOwner(t, q)
+	employee := seedUserWithRole(t, q, "employee")
+	workOrder, ts, client, ownerCSRF := attachmentWorkOrder(t, q, owner.Username, "DELETE-OWNER")
+	defer ts.Close()
+	uploaded := uploadAttachmentBody(t, uploadAttachment(t, client, ts.URL, ownerCSRF, workOrder.WorkOrder.Ucode, "intake", "equipo.png", attachmentPNG(t)))
+
+	employeeCSRF := login(t, client, ts.URL, employee.Username)
+	res := deleteReq(t, client, ts.URL+"/api/v1/work-orders/"+workOrder.WorkOrder.Ucode+"/attachments/"+uploaded.Attachment.Ucode, employeeCSRF)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusForbidden, "forbidden")
+}
+
 type attachmentBody struct {
 	Attachment attachmentDTO `json:"attachment"`
 }

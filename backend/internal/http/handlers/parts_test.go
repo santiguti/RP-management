@@ -48,6 +48,21 @@ func TestParts_CreateOK(t *testing.T) {
 	}
 }
 
+func TestParts_CreateRequiresOwner(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedUserWithRole(t, q, "employee")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts", map[string]string{
+		"name": "Cable flex",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusForbidden, "forbidden")
+}
+
 func TestParts_CreateWithSkuOK(t *testing.T) {
 	q, cleanup := newTxQueries(t)
 	defer cleanup()
@@ -306,6 +321,22 @@ func TestParts_UpdateOK(t *testing.T) {
 	}
 }
 
+func TestParts_UpdateRequiresOwner(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedUserWithRole(t, q, "employee")
+	part := seedPart(t, q, partSeed{Name: "Nombre viejo", Sku: "OLD"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := patchJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode), map[string]any{
+		"name": "Nombre nuevo",
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusForbidden, "forbidden")
+}
+
 func TestParts_DeleteIdempotent(t *testing.T) {
 	q, cleanup := newTxQueries(t)
 	defer cleanup()
@@ -322,6 +353,20 @@ func TestParts_DeleteIdempotent(t *testing.T) {
 			t.Fatalf("delete %d status = %d, want %d: %s", i+1, res.StatusCode, http.StatusNoContent, readBody(t, res))
 		}
 	}
+}
+
+func TestParts_DeleteRequiresOwner(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedUserWithRole(t, q, "employee")
+	part := seedPart(t, q, partSeed{Name: "Borrable"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := deleteReq(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode), csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusForbidden, "forbidden")
 }
 
 func TestMovement_CreatePurchase_OK(t *testing.T) {

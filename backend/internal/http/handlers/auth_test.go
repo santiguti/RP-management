@@ -316,7 +316,10 @@ func testRouter(q *sqlc.Queries) http.Handler {
 				wr.Get("/{ucode}/attachments", attachmentsH.List)
 				wr.Post("/{ucode}/attachments", attachmentsH.Upload)
 				wr.Get("/{ucode}/attachments/{att_ucode}", attachmentsH.Download)
-				wr.Delete("/{ucode}/attachments/{att_ucode}", attachmentsH.Delete)
+				wr.Group(func(o chi.Router) {
+					o.Use(middleware.RequireRole("owner"))
+					o.Delete("/{ucode}/attachments/{att_ucode}", attachmentsH.Delete)
+				})
 				wr.Patch("/{ucode}", workOrdersH.Update)
 				wr.Post("/{ucode}/transitions/{event}", workOrdersH.Transition)
 			})
@@ -366,12 +369,15 @@ func testRouter(q *sqlc.Queries) http.Handler {
 			})
 			pr.Route("/parts", func(pr2 chi.Router) {
 				pr2.Get("/", partsH.Search)
-				pr2.Post("/", partsH.Create)
 				pr2.Get("/{ucode}", partsH.Get)
-				pr2.Patch("/{ucode}", partsH.Update)
-				pr2.Delete("/{ucode}", partsH.Delete)
 				pr2.Get("/{ucode}/movements", partsH.ListMovements)
 				pr2.Post("/{ucode}/movements", partsH.CreateMovement)
+				pr2.Group(func(o chi.Router) {
+					o.Use(middleware.RequireRole("owner"))
+					o.Post("/", partsH.Create)
+					o.Patch("/{ucode}", partsH.Update)
+					o.Delete("/{ucode}", partsH.Delete)
+				})
 			})
 			pr.Route("/device-models", func(mr chi.Router) {
 				mr.Use(middleware.RequireRole("owner"))

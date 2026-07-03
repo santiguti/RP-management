@@ -19,6 +19,7 @@ import { RecurringExpensesPage } from "@/pages/settings/recurring-expenses"
 import { ReportsPage } from "@/pages/reports"
 import { PartsListPage } from "@/pages/parts/list"
 import { PartDetailPage } from "@/pages/parts/detail"
+import { ImportPage } from "@/pages/import"
 
 const qc = new QueryClient()
 
@@ -41,6 +42,14 @@ export default function App() {
             <Route path="transactions" element={<TransactionsListPage />} />
             <Route path="suppliers" element={<SuppliersListPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route
+              path="import"
+              element={
+                <RequireOwner>
+                  <ImportPage />
+                </RequireOwner>
+              }
+            />
             <Route
               path="settings/lookups"
               element={
