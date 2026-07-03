@@ -20,6 +20,7 @@ import { ReportsPage } from "@/pages/reports"
 import { PartsListPage } from "@/pages/parts/list"
 import { PartDetailPage } from "@/pages/parts/detail"
 import { ImportPage } from "@/pages/import"
+import { AuditLogPage } from "@/pages/settings/audit-log"
 
 const qc = new QueryClient()
 
@@ -63,6 +64,14 @@ export default function App() {
               element={
                 <RequireOwner>
                   <RecurringExpensesPage />
+                </RequireOwner>
+              }
+            />
+            <Route
+              path="settings/audit-log"
+              element={
+                <RequireOwner>
+                  <AuditLogPage />
                 </RequireOwner>
               }
             />

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom"
 
-import type { MoneySummary, TopClientRevenue } from "@/api/reports"
+import type { LowStockPart, MoneySummary, TopClientRevenue } from "@/api/reports"
 import type { WoStatus } from "@/api/work-orders"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -64,6 +64,33 @@ export function DashboardPage() {
       </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle>Repuestos bajo stock</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dashboard.isLoading ? (
+              <p className="text-sm text-muted-foreground">Cargando...</p>
+            ) : data && data.low_stock_parts.length > 0 ? (
+              <div className="overflow-x-auto rounded-md border">
+                <div className="grid min-w-[32rem] grid-cols-[1fr_80px_100px_90px] gap-3 border-b bg-muted/30 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <span>Nombre</span>
+                  <span className="text-right">Stock</span>
+                  <span className="text-right">Reposición</span>
+                  <span className="text-right">Faltante</span>
+                </div>
+                <div className="divide-y">
+                  {data.low_stock_parts.map((part) => (
+                    <LowStockPartRow key={part.ucode} part={part} />
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin repuestos por debajo del punto de reposición</p>
+            )}
+          </CardContent>
+        </Card>
+
         <Card className="rounded-md">
           <CardHeader>
             <CardTitle>Órdenes listas hace +7 días</CardTitle>
@@ -171,6 +198,20 @@ function TopClientRow({ client }: { client: TopClientRevenue }) {
   )
 }
 
+function LowStockPartRow({ part }: { part: LowStockPart }) {
+  return (
+    <Link
+      to={`/parts/${part.ucode}`}
+      className="grid min-w-[32rem] grid-cols-[1fr_80px_100px_90px] gap-3 px-3 py-2 text-sm hover:bg-accent"
+    >
+      <span className="min-w-0 truncate font-medium">{part.name}</span>
+      <span className="text-right text-muted-foreground">{formatQuantity(part.current_stock, part.unit)}</span>
+      <span className="text-right text-muted-foreground">{formatQuantity(part.reorder_level, part.unit)}</span>
+      <span className="text-right font-medium text-destructive">{formatQuantity(part.deficit, part.unit)}</span>
+    </Link>
+  )
+}
+
 function statusLabel(status: string) {
   return woStatusLabels[status as WoStatus] ?? status
 }
@@ -180,4 +221,9 @@ function netClass(value?: string) {
   if (net > 0) return "text-emerald-700"
   if (net < 0) return "text-destructive"
   return "text-slate-700"
+}
+
+function formatQuantity(value: string, unit: string) {
+  const normalized = Number(value).toLocaleString("es-AR", { maximumFractionDigits: 2 })
+  return `${normalized} ${unit}`
 }

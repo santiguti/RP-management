@@ -42,12 +42,23 @@ export type TopClientRevenue = {
   total_ars: string
 }
 
+export type LowStockPart = {
+  ucode: string
+  name: string
+  sku?: string
+  unit: string
+  current_stock: string
+  reorder_level: string
+  deficit: string
+}
+
 export type DashboardReport = {
   today: MoneySummary
   month: MoneySummary
   open_work_orders_by_status: Record<string, number>
   aging_ready_work_orders: AgingReadyWorkOrder[]
   top_clients_90d: TopClientRevenue[]
+  low_stock_parts: LowStockPart[]
 }
 
 export type DateRangeParams = {

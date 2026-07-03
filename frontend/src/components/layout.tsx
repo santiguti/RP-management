@@ -50,17 +50,23 @@ export function AppLayout() {
             Reportes
           </NavLink>
           {user?.role === "owner" ? (
-            <>
+            <div className="pt-3">
+              <div className="px-3 pb-1 text-xs font-semibold uppercase tracking-normal text-muted-foreground">
+                Ajustes
+              </div>
               <NavLink to="/settings/lookups" className={linkClass}>
-                Ajustes · Catálogos
+                Catálogos
               </NavLink>
               <NavLink to="/settings/recurring-expenses" className={linkClass}>
-                Ajustes · Gastos fijos
+                Gastos fijos
               </NavLink>
               <NavLink to="/import" className={linkClass}>
-                Ajustes · Importar
+                Importar
               </NavLink>
-            </>
+              <NavLink to="/settings/audit-log" className={linkClass}>
+                Bitácora
+              </NavLink>
+            </div>
           ) : null}
         </nav>
         <div className="mt-auto space-y-3 px-3">

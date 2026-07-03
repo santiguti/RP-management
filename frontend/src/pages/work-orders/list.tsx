@@ -6,6 +6,7 @@ import type { Client } from "@/api/clients"
 import { searchClients } from "@/api/clients"
 import type { WorkOrder, WoStatus } from "@/api/work-orders"
 import { DataTable, type Column } from "@/components/data-table"
+import { DownloadCsvButton } from "@/components/download-csv-button"
 import { EntityCombobox } from "@/components/entity-combobox"
 import { WoStatusBadge, woStatusLabels } from "@/components/wo-status-badge"
 import { Button } from "@/components/ui/button"
@@ -87,6 +88,7 @@ export function WorkOrdersListPage() {
 
   const list = useWorkOrders(queryParams)
   const kanban = useWorkOrders(kanbanQueryParams)
+  const csvHref = `/api/v1/work-orders.csv${csvQuery({ status, q })}`
 
   const columns = useMemo<Column<WorkOrder>[]>(
     () => [
@@ -106,12 +108,15 @@ export function WorkOrdersListPage() {
           <h1 className="text-2xl font-semibold tracking-normal">Órdenes de trabajo</h1>
           <p className="text-sm text-muted-foreground">Seguimiento de ingresos, diagnósticos y reparaciones.</p>
         </div>
-        <Button asChild>
-          <Link to="/work-orders/new">
-            <Plus />
-            Nueva orden
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <DownloadCsvButton href={csvHref} />
+          <Button asChild>
+            <Link to="/work-orders/new">
+              <Plus />
+              Nueva orden
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_220px_minmax(240px,1fr)]">
@@ -305,4 +310,12 @@ function timeAgo(value: string) {
   if (hours < 24) return `Hace ${hours} h`
   const days = Math.floor(hours / 24)
   return `Hace ${days} d`
+}
+
+function csvQuery(filters: { status?: string; q?: string }) {
+  const out = new URLSearchParams()
+  if (filters.status) out.set("status", filters.status)
+  if (filters.q) out.set("q", filters.q)
+  const query = out.toString()
+  return query ? `?${query}` : ""
 }

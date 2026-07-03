@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import type { Client, ClientInput } from "@/api/clients"
 import { DataTable, type Column } from "@/components/data-table"
+import { DownloadCsvButton } from "@/components/download-csv-button"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useClients, useCreateClient } from "@/hooks/use-clients"
@@ -65,10 +66,13 @@ export function ClientsListPage() {
           <h1 className="text-2xl font-semibold tracking-normal">Clientes</h1>
           <p className="text-sm text-muted-foreground">Administrá datos de contacto y dispositivos.</p>
         </div>
-        <Button type="button" onClick={() => setFormOpen(true)}>
-          <Plus />
-          Nuevo cliente
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <DownloadCsvButton href="/api/v1/clients.csv" />
+          <Button type="button" onClick={() => setFormOpen(true)}>
+            <Plus />
+            Nuevo cliente
+          </Button>
+        </div>
       </div>
 
       <DataTable

@@ -11,6 +11,7 @@ import type {
   TransactionType,
   UpdateTransactionInput,
 } from "@/api/transactions"
+import { DownloadCsvButton } from "@/components/download-csv-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/data-table"
@@ -47,6 +48,7 @@ export function TransactionsListPage() {
   const createTransaction = useCreateTransaction()
   const updateTransaction = useUpdateTransaction()
   const deleteTransaction = useDeleteTransaction()
+  const csvHref = `/api/v1/transactions.csv${transactionsCsvQuery(filters)}`
 
   const columns = useMemo<Column<Transaction>[]>(
     () => [
@@ -162,10 +164,13 @@ export function TransactionsListPage() {
           <h1 className="text-2xl font-semibold tracking-normal">Movimientos</h1>
           <p className="text-sm text-muted-foreground">Ingresos, egresos y pagos asociados a órdenes.</p>
         </div>
-        <Button type="button" onClick={() => setFormOpen(true)}>
-          <Plus />
-          Nuevo movimiento
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <DownloadCsvButton href={csvHref} />
+          <Button type="button" onClick={() => setFormOpen(true)}>
+            <Plus />
+            Nuevo movimiento
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 rounded-md border bg-background p-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -275,4 +280,14 @@ function parseTypeFilter(value: string | null): TransactionType | "" {
 
 function parseCategoryFilter(value: string | null): TransactionCategory | "" {
   return allCategories.includes(value as TransactionCategory) ? (value as TransactionCategory) : ""
+}
+
+function transactionsCsvQuery(filters: ListTransactionsParams) {
+  const out = new URLSearchParams()
+  if (filters.from) out.set("from", filters.from)
+  if (filters.to) out.set("to", filters.to)
+  if (filters.type) out.set("type", filters.type)
+  if (filters.category) out.set("category", filters.category)
+  const query = out.toString()
+  return query ? `?${query}` : ""
 }

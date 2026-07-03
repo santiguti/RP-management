@@ -8,6 +8,7 @@ import type { Part, PartInput } from "@/api/parts"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/data-table"
+import { DownloadCsvButton } from "@/components/download-csv-button"
 import { useCreatePart, useParts } from "@/hooks/use-parts"
 import { formatARSValue } from "@/lib/money"
 import { PartForm } from "./part-form"
@@ -87,10 +88,13 @@ export function PartsListPage({ createOnMount = false }: { createOnMount?: boole
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold tracking-normal">Repuestos</h1>
-        <Button type="button" onClick={() => setFormOpen(true)}>
-          <Plus />
-          Nuevo repuesto
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <DownloadCsvButton href="/api/v1/parts.csv" />
+          <Button type="button" onClick={() => setFormOpen(true)}>
+            <Plus />
+            Nuevo repuesto
+          </Button>
+        </div>
       </div>
 
       <label className="flex w-fit cursor-pointer items-center gap-2 text-sm font-medium">
