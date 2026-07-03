@@ -53,3 +53,15 @@ WHERE wo.voided_ts IS NULL
   AND wo.status = 'ready'
   AND wo.ready_ts < now() - INTERVAL '7 days'
 ORDER BY wo.ready_ts ASC;
+
+-- name: ReportLowStockParts :many
+SELECT p.ucode, p.name, p.sku, p.unit,
+       p.current_stock,
+       p.reorder_level,
+       (p.reorder_level - p.current_stock)::numeric(10,2) AS deficit
+FROM rp.parts p
+WHERE p.voided_ts IS NULL
+  AND p.reorder_level IS NOT NULL
+  AND p.current_stock < p.reorder_level
+ORDER BY deficit DESC, p.name ASC
+LIMIT sqlc.arg(max_rows)::int;

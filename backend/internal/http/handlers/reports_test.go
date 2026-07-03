@@ -133,8 +133,62 @@ func TestReportDashboard_EmptyDB(t *testing.T) {
 	if body.Today.IncomeArs != "0.00" || body.Month.ExpenseArs != "0.00" {
 		t.Fatalf("dashboard = %+v, want zero money", body)
 	}
-	if len(body.OpenWorkOrdersByStatus) != 0 || len(body.AgingReadyWorkOrders) != 0 || len(body.TopClients90d) != 0 {
+	if len(body.OpenWorkOrdersByStatus) != 0 || len(body.AgingReadyWorkOrders) != 0 || len(body.TopClients90d) != 0 || len(body.LowStockParts) != 0 {
 		t.Fatalf("dashboard = %+v, want empty collections", body)
+	}
+}
+
+func TestReportLowStock_ExcludesPartsWithoutReorderLevel(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	low := seedPart(t, q, partSeed{Name: "Bajo", ReorderLevel: "10"})
+	ok := seedPart(t, q, partSeed{Name: "Suficiente", ReorderLevel: "10"})
+	none := seedPart(t, q, partSeed{Name: "Sin Punto"})
+	insertPartMovement(t, low.ID, "adjustment", "2")
+	insertPartMovement(t, ok.ID, "adjustment", "15")
+	insertPartMovement(t, none.ID, "adjustment", "1")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	body := getLowStockReport(t, client, ts.URL, "")
+	if len(body.Parts) != 1 || body.Parts[0].Name != "Bajo" {
+		t.Fatalf("low stock = %+v, want only Bajo", body.Parts)
+	}
+}
+
+func TestReportLowStock_OrdersByDeficit(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	large := seedPart(t, q, partSeed{Name: "Falta Mucho", ReorderLevel: "10"})
+	small := seedPart(t, q, partSeed{Name: "Falta Poco", ReorderLevel: "10"})
+	insertPartMovement(t, large.ID, "adjustment", "1")
+	insertPartMovement(t, small.ID, "adjustment", "8")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	body := getLowStockReport(t, client, ts.URL, "")
+	if len(body.Parts) != 2 || body.Parts[0].Name != "Falta Mucho" || body.Parts[0].Deficit != "9.00" {
+		t.Fatalf("low stock = %+v, want larger deficit first", body.Parts)
+	}
+}
+
+func TestDashboard_IncludesLowStock(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Repuesto Bajo", ReorderLevel: "5"})
+	insertPartMovement(t, part.ID, "adjustment", "1")
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	body := getDashboardReport(t, client, ts.URL)
+	if len(body.LowStockParts) != 1 || body.LowStockParts[0].Name != "Repuesto Bajo" {
+		t.Fatalf("dashboard low_stock_parts = %+v, want Repuesto Bajo", body.LowStockParts)
 	}
 }
 
@@ -179,6 +233,25 @@ func getDashboardReport(t *testing.T, client *http.Client, baseURL string) dashb
 		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusOK, readBody(t, res))
 	}
 	var body dashboardReportDTO
+	decodeJSON(t, res.Body, &body)
+	return body
+}
+
+type lowStockReportBody struct {
+	Parts []lowStockPartDTO `json:"parts"`
+}
+
+func getLowStockReport(t *testing.T, client *http.Client, baseURL, query string) lowStockReportBody {
+	t.Helper()
+	res, err := client.Get(baseURL + "/api/v1/reports/low-stock" + query)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", res.StatusCode, http.StatusOK, readBody(t, res))
+	}
+	var body lowStockReportBody
 	decodeJSON(t, res.Body, &body)
 	return body
 }

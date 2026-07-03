@@ -77,6 +77,7 @@ type Querier interface {
 	ReportAgingReadyWorkOrders(ctx context.Context) ([]ReportAgingReadyWorkOrdersRow, error)
 	ReportBalance(ctx context.Context, arg ReportBalanceParams) (ReportBalanceRow, error)
 	ReportDashboardCounters(ctx context.Context) (ReportDashboardCountersRow, error)
+	ReportLowStockParts(ctx context.Context, maxRows int32) ([]ReportLowStockPartsRow, error)
 	ReportPnLByCategory(ctx context.Context, arg ReportPnLByCategoryParams) ([]ReportPnLByCategoryRow, error)
 	ReportTopClientsByRevenue(ctx context.Context) ([]ReportTopClientsByRevenueRow, error)
 	ReportWorkOrderCountsByStatus(ctx context.Context) ([]ReportWorkOrderCountsByStatusRow, error)

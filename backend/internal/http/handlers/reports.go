@@ -41,6 +41,7 @@ type dashboardReportDTO struct {
 	OpenWorkOrdersByStatus map[string]int64         `json:"open_work_orders_by_status"`
 	AgingReadyWorkOrders   []agingReadyWorkOrderDTO `json:"aging_ready_work_orders"`
 	TopClients90d          []topClientDTO           `json:"top_clients_90d"`
+	LowStockParts          []lowStockPartDTO        `json:"low_stock_parts"`
 }
 
 type moneySummaryDTO struct {
@@ -61,6 +62,16 @@ type topClientDTO struct {
 	Ucode    string `json:"ucode"`
 	Name     string `json:"name"`
 	TotalArs string `json:"total_ars"`
+}
+
+type lowStockPartDTO struct {
+	Ucode        string  `json:"ucode"`
+	Name         string  `json:"name"`
+	Sku          *string `json:"sku,omitempty"`
+	Unit         string  `json:"unit"`
+	CurrentStock string  `json:"current_stock"`
+	ReorderLevel string  `json:"reorder_level"`
+	Deficit      string  `json:"deficit"`
 }
 
 type Reports struct {
@@ -159,6 +170,12 @@ func (rp *Reports) Dashboard(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return
 	}
+	lowStockRows, err := rp.queries.ReportLowStockParts(r.Context(), 10)
+	if err != nil {
+		log.Printf("report dashboard low stock parts: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
 
 	statuses := make(map[string]int64, len(statusRows))
 	for _, row := range statusRows {
@@ -205,7 +222,38 @@ func (rp *Reports) Dashboard(w http.ResponseWriter, r *http.Request) {
 		OpenWorkOrdersByStatus: statuses,
 		AgingReadyWorkOrders:   aging,
 		TopClients90d:          topClients,
+		LowStockParts:          toLowStockPartDTOs(lowStockRows),
 	})
+}
+
+func (rp *Reports) LowStock(w http.ResponseWriter, r *http.Request) {
+	limit := parsePositiveInt(r.URL.Query().Get("limit"), 50)
+	if limit > 200 {
+		limit = 200
+	}
+	rows, err := rp.queries.ReportLowStockParts(r.Context(), int32(limit))
+	if err != nil {
+		log.Printf("report low stock parts: %v", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string][]lowStockPartDTO{"parts": toLowStockPartDTOs(rows)})
+}
+
+func toLowStockPartDTOs(rows []sqlc.ReportLowStockPartsRow) []lowStockPartDTO {
+	out := make([]lowStockPartDTO, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, lowStockPartDTO{
+			Ucode:        uuidString(row.Ucode),
+			Name:         row.Name,
+			Sku:          stringPtrFromText(row.Sku),
+			Unit:         row.Unit,
+			CurrentStock: reportMoneyString(row.CurrentStock),
+			ReorderLevel: reportMoneyString(row.ReorderLevel),
+			Deficit:      reportMoneyString(row.Deficit),
+		})
+	}
+	return out
 }
 
 func parseReportDateRange(w http.ResponseWriter, r *http.Request, allowPeriod bool) (pgtype.Date, pgtype.Date, string, string, bool) {

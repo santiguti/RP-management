@@ -110,6 +110,57 @@ func (q *Queries) ReportDashboardCounters(ctx context.Context) (ReportDashboardC
 	return i, err
 }
 
+const reportLowStockParts = `-- name: ReportLowStockParts :many
+SELECT p.ucode, p.name, p.sku, p.unit,
+       p.current_stock,
+       p.reorder_level,
+       (p.reorder_level - p.current_stock)::numeric(10,2) AS deficit
+FROM rp.parts p
+WHERE p.voided_ts IS NULL
+  AND p.reorder_level IS NOT NULL
+  AND p.current_stock < p.reorder_level
+ORDER BY deficit DESC, p.name ASC
+LIMIT $1::int
+`
+
+type ReportLowStockPartsRow struct {
+	Ucode        pgtype.UUID    `json:"ucode"`
+	Name         string         `json:"name"`
+	Sku          pgtype.Text    `json:"sku"`
+	Unit         string         `json:"unit"`
+	CurrentStock pgtype.Numeric `json:"current_stock"`
+	ReorderLevel pgtype.Numeric `json:"reorder_level"`
+	Deficit      pgtype.Numeric `json:"deficit"`
+}
+
+func (q *Queries) ReportLowStockParts(ctx context.Context, maxRows int32) ([]ReportLowStockPartsRow, error) {
+	rows, err := q.db.Query(ctx, reportLowStockParts, maxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReportLowStockPartsRow{}
+	for rows.Next() {
+		var i ReportLowStockPartsRow
+		if err := rows.Scan(
+			&i.Ucode,
+			&i.Name,
+			&i.Sku,
+			&i.Unit,
+			&i.CurrentStock,
+			&i.ReorderLevel,
+			&i.Deficit,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reportPnLByCategory = `-- name: ReportPnLByCategory :many
 SELECT
   transaction_type,
