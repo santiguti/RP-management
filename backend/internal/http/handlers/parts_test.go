@@ -417,6 +417,7 @@ func TestMovement_CreatePurchase_WithAutoTransaction(t *testing.T) {
 		"movement_type":    "purchase",
 		"quantity":         "5",
 		"unit_cost":        "100.00",
+		"payment_method":   "cash",
 		"supplier_ucode":   uuidString(supplier.Ucode),
 		"link_transaction": true,
 	}, csrf)
@@ -437,17 +438,36 @@ func TestMovement_CreatePurchase_WithAutoTransaction(t *testing.T) {
 	}
 
 	var amount pgtype.Numeric
-	var category, counterpartyType string
+	var paymentMethod, category, counterpartyType string
 	if err := testPool.QueryRow(context.Background(), `
-SELECT amount, category, counterparty_type
+SELECT amount, payment_method, category, counterparty_type
 FROM rp.transactions
 WHERE ucode = $1 AND voided_ts IS NULL
-`, body.Movement.Transaction.Ucode).Scan(&amount, &category, &counterpartyType); err != nil {
+`, body.Movement.Transaction.Ucode).Scan(&amount, &paymentMethod, &category, &counterpartyType); err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(amount); got != "500.00" || category != "part_purchase" || counterpartyType != "supplier" {
-		t.Fatalf("transaction = amount %q category %q counterparty %q, want 500.00/part_purchase/supplier", got, category, counterpartyType)
+	if got := partNumericToString(amount); got != "500.00" || paymentMethod != "cash" || category != "part_purchase" || counterpartyType != "supplier" {
+		t.Fatalf("transaction = amount %q payment %q category %q counterparty %q, want 500.00/cash/part_purchase/supplier", got, paymentMethod, category, counterpartyType)
 	}
+}
+
+func TestMovement_AutoTransactionRequiresPaymentMethod_400(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	part := seedPart(t, q, partSeed{Name: "Display"})
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := postJSON(t, client, ts.URL+"/api/v1/parts/"+uuidString(part.Ucode)+"/movements", map[string]any{
+		"movement_type":    "purchase",
+		"quantity":         "5",
+		"unit_cost":        "100.00",
+		"link_transaction": true,
+	}, csrf)
+	defer res.Body.Close()
+	assertError(t, res, http.StatusBadRequest, "payment_method_required")
 }
 
 func TestMovement_AdjustmentIn_OK(t *testing.T) {

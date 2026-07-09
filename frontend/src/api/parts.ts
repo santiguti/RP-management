@@ -1,4 +1,5 @@
 import { apiClient } from "./client"
+import type { PaymentMethod } from "./transactions"
 
 export type Part = {
   ucode: string
@@ -41,6 +42,7 @@ export type MovementInput = {
   quantity: string
   adjustment_out?: boolean
   unit_cost?: string
+  payment_method?: PaymentMethod
   supplier_ucode?: string
   notes?: string
   link_transaction?: boolean

@@ -77,6 +77,7 @@ type createMovementReq struct {
 	Quantity        string  `json:"quantity" validate:"required"`
 	AdjustmentOut   *bool   `json:"adjustment_out" validate:"omitempty"`
 	UnitCost        *string `json:"unit_cost" validate:"omitempty"`
+	PaymentMethod   *string `json:"payment_method" validate:"omitempty,oneof=cash transfer card mercadopago other"`
 	SupplierUcode   *string `json:"supplier_ucode" validate:"omitempty"`
 	Notes           *string `json:"notes" validate:"omitempty,max=2000"`
 	LinkTransaction *bool   `json:"link_transaction" validate:"omitempty"`
@@ -374,7 +375,11 @@ func (p *Parts) CreateMovement(w http.ResponseWriter, r *http.Request) {
 
 	var movement sqlc.PartMovement
 	if req.MovementType == string(partdomain.MovementPurchase) && req.LinkTransaction != nil && *req.LinkTransaction && unitCost.Valid {
-		movement, err = p.createPurchaseMovementWithTransaction(r, part, params, quantityRat, unitCostRat, supplierID)
+		if req.PaymentMethod == nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "payment_method_required"})
+			return
+		}
+		movement, err = p.createPurchaseMovementWithTransaction(r, part, params, quantityRat, unitCostRat, supplierID, *req.PaymentMethod)
 	} else {
 		movement, err = p.queries.CreatePartMovement(r.Context(), params)
 	}
@@ -463,6 +468,7 @@ func (p *Parts) createPurchaseMovementWithTransaction(
 	movementParams sqlc.CreatePartMovementParams,
 	quantity, unitCost *big.Rat,
 	supplierID pgtype.Int8,
+	paymentMethod string,
 ) (sqlc.PartMovement, error) {
 	tx, err := p.pool.Begin(r.Context())
 	if err != nil {
@@ -487,7 +493,7 @@ func (p *Parts) createPurchaseMovementWithTransaction(
 		Currency:         "ARS",
 		FxRateToArs:      numericFromRat(big.NewRat(1, 1)),
 		TransactionDate:  pgtype.Date{Time: time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC), Valid: true},
-		PaymentMethod:    "transfer",
+		PaymentMethod:    paymentMethod,
 		Category:         "part_purchase",
 		CounterpartyType: counterpartyType,
 		SupplierID:       supplierID,
@@ -671,6 +677,7 @@ func trimCreateMovementReq(req *createMovementReq) {
 	req.MovementType = strings.TrimSpace(req.MovementType)
 	req.Quantity = strings.TrimSpace(req.Quantity)
 	trimStringPtr(req.UnitCost)
+	trimStringPtr(req.PaymentMethod)
 	trimStringPtr(req.SupplierUcode)
 	trimStringPtr(req.Notes)
 }

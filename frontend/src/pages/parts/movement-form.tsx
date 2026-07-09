@@ -3,11 +3,13 @@ import { toast } from "sonner"
 
 import type { MovementInput, Part } from "@/api/parts"
 import { listSuppliers, type Supplier } from "@/api/suppliers"
+import type { PaymentMethod } from "@/api/transactions"
 import { EntityCombobox } from "@/components/entity-combobox"
 import { FormDialog } from "@/components/form-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { paymentMethodLabels, paymentMethods } from "@/lib/money"
 
 type MovementFormProps = {
   open: boolean
@@ -27,6 +29,7 @@ export function MovementForm({ open, onOpenChange, part, onSubmit, isSubmitting 
   const [supplierUcode, setSupplierUcode] = useState<string | null>(null)
   const [notes, setNotes] = useState("")
   const [linkTransaction, setLinkTransaction] = useState(false)
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash")
 
   useEffect(() => {
     if (!open) return
@@ -37,6 +40,7 @@ export function MovementForm({ open, onOpenChange, part, onSubmit, isSubmitting 
     setSupplierUcode(null)
     setNotes("")
     setLinkTransaction(false)
+    setPaymentMethod("cash")
   }, [open])
 
   const submit = async () => {
@@ -53,6 +57,7 @@ export function MovementForm({ open, onOpenChange, part, onSubmit, isSubmitting 
       quantity: quantity.trim(),
       adjustment_out: movementType === "adjustment" ? adjustmentOut : undefined,
       unit_cost: movementType === "purchase" ? emptyToUndefined(unitCost) : undefined,
+      payment_method: movementType === "purchase" && linkTransaction ? paymentMethod : undefined,
       supplier_ucode: movementType === "purchase" ? supplierUcode ?? undefined : undefined,
       notes: emptyToUndefined(notes),
       link_transaction: movementType === "purchase" && linkTransaction ? true : undefined,
@@ -114,6 +119,17 @@ export function MovementForm({ open, onOpenChange, part, onSubmit, isSubmitting 
             />
             Registrar movimiento monetario también
           </label>
+          {linkTransaction ? (
+            <Field label="Método de pago">
+              <NativeSelect value={paymentMethod} onChange={(value) => setPaymentMethod(value as PaymentMethod)}>
+                {paymentMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {paymentMethodLabels[method]}
+                  </option>
+                ))}
+              </NativeSelect>
+            </Field>
+          ) : null}
         </>
       ) : null}
       <Field label="Notas">
@@ -150,6 +166,26 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label>{label}</Label>
       {children}
     </div>
+  )
+}
+
+function NativeSelect({
+  value,
+  onChange,
+  children,
+}: {
+  value: string
+  onChange: (value: string) => void
+  children: React.ReactNode
+}) {
+  return (
+    <select
+      className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {children}
+    </select>
   )
 }
 
