@@ -66,3 +66,19 @@ export function formatDateOnly(value?: string) {
   if (!value) return "-"
   return new Intl.DateTimeFormat("es-AR", { dateStyle: "short" }).format(new Date(`${value}T00:00:00`))
 }
+
+// Cents-safe arithmetic over the backend's NUMERIC(14,2) decimal strings.
+// Never go through floats: 0.1 + 0.2 problems are exactly what the
+// string-serialized money convention exists to avoid.
+export function moneyToCents(amount?: string): number | null {
+  if (!amount) return null
+  const match = amount.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/)
+  if (!match) return null
+  return Number(match[1]) * 100 + Number((match[2] ?? "").padEnd(2, "0"))
+}
+
+export function centsToMoney(cents: number): string {
+  const sign = cents < 0 ? "-" : ""
+  const abs = Math.abs(cents)
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`
+}

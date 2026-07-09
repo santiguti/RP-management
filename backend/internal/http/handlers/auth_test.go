@@ -61,7 +61,26 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
+	// Serialize against other test packages that share this database
+	// (cmd/jobs): both reset + reseed the same tables, and `go test ./...`
+	// runs packages in parallel. Advisory lock 421338 must match everywhere.
+	lockConn, err := pool.Acquire(context.Background())
+	if err != nil {
+		pool.Close()
+		_ = os.RemoveAll(attachmentsDir)
+		panic(err)
+	}
+	if _, err := lockConn.Exec(context.Background(), `SELECT pg_advisory_lock(421338)`); err != nil {
+		lockConn.Release()
+		pool.Close()
+		_ = os.RemoveAll(attachmentsDir)
+		panic(err)
+	}
+
 	code := m.Run()
+
+	_, _ = lockConn.Exec(context.Background(), `SELECT pg_advisory_unlock(421338)`)
+	lockConn.Release()
 	pool.Close()
 	_ = os.RemoveAll(attachmentsDir)
 	os.Exit(code)

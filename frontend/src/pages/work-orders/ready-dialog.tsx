@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 
-import type { TransitionInput } from "@/api/work-orders"
+import type { TransitionInput, WorkOrder } from "@/api/work-orders"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { centsToMoney, moneyToCents } from "@/lib/money"
 
 const moneyPattern = /^\d+(\.\d{1,2})?$/
 
@@ -21,12 +22,30 @@ type ReadyDialogProps = {
   onOpenChange: (open: boolean) => void
   onSubmit: (input: TransitionInput) => void | Promise<void>
   isSubmitting?: boolean
+  workOrder: Pick<WorkOrder, "quote_amount" | "parts_amount">
 }
 
-export function ReadyDialog({ open, onOpenChange, onSubmit, isSubmitting = false }: ReadyDialogProps) {
+export function ReadyDialog({ open, onOpenChange, onSubmit, isSubmitting = false, workOrder }: ReadyDialogProps) {
   const [laborAmount, setLaborAmount] = useState("")
   const [partsAmount, setPartsAmount] = useState("")
   const [finalAmount, setFinalAmount] = useState("")
+
+  // Prefill on open: Repuestos = sale price of the parts used on the WO,
+  // Total final = the client-approved quote, Mano de obra = the difference.
+  // Everything stays editable — these are starting values, not locks.
+  useEffect(() => {
+    if (!open) return
+    const partsCents = moneyToCents(workOrder.parts_amount) ?? 0
+    const quoteCents = moneyToCents(workOrder.quote_amount)
+    setPartsAmount(centsToMoney(partsCents))
+    if (quoteCents !== null) {
+      setFinalAmount(centsToMoney(quoteCents))
+      setLaborAmount(centsToMoney(Math.max(quoteCents - partsCents, 0)))
+    } else {
+      setLaborAmount("")
+      setFinalAmount(partsCents > 0 ? centsToMoney(partsCents) : "")
+    }
+  }, [open, workOrder.parts_amount, workOrder.quote_amount])
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -50,7 +69,9 @@ export function ReadyDialog({ open, onOpenChange, onSubmit, isSubmitting = false
         <form className="space-y-5" onSubmit={submit}>
           <DialogHeader>
             <DialogTitle>Cerrar reparación</DialogTitle>
-            <DialogDescription>Podés completar uno, varios o ningún monto.</DialogDescription>
+            <DialogDescription>
+              Montos precargados según el presupuesto aprobado y los repuestos usados — ajustalos si hace falta.
+            </DialogDescription>
           </DialogHeader>
           <Field label="Mano de obra">
             <Input value={laborAmount} onChange={(event) => setLaborAmount(event.target.value)} placeholder="10000.00" />

@@ -168,6 +168,7 @@ export function WorkOrderDetailPage() {
         onOpenChange={setReadyOpen}
         onSubmit={(input) => runTransition("mark_ready", input)}
         isSubmitting={transition.isPending}
+        workOrder={wo}
       />
       <CancelDialog
         open={cancelOpen}

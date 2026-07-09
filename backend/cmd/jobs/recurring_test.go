@@ -32,7 +32,24 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	testPool = pool
+
+	// Serialize against internal/http/handlers, which resets the same
+	// database. Advisory lock id must match the one in auth_test.go.
+	lockConn, err := pool.Acquire(context.Background())
+	if err != nil {
+		pool.Close()
+		panic(err)
+	}
+	if _, err := lockConn.Exec(context.Background(), `SELECT pg_advisory_lock(421338)`); err != nil {
+		lockConn.Release()
+		pool.Close()
+		panic(err)
+	}
+
 	code := m.Run()
+
+	_, _ = lockConn.Exec(context.Background(), `SELECT pg_advisory_unlock(421338)`)
+	lockConn.Release()
 	pool.Close()
 	os.Exit(code)
 }
