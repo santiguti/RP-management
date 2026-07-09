@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/data-table"
 import { DownloadCsvButton } from "@/components/download-csv-button"
+import { useIsOwner } from "@/hooks/use-auth"
 import { useCreatePart, useParts } from "@/hooks/use-parts"
 import { formatARSValue } from "@/lib/money"
 import { PartForm } from "./part-form"
@@ -18,7 +19,8 @@ const PAGE_SIZE = 25
 export function PartsListPage({ createOnMount = false }: { createOnMount?: boolean }) {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const [formOpen, setFormOpen] = useState(createOnMount)
+  const isOwner = useIsOwner()
+  const [formOpen, setFormOpen] = useState(false)
   const q = params.get("q") ?? ""
   const page = Number(params.get("page") ?? "1") || 1
   const lowStock = params.get("low_stock") === "true"
@@ -26,8 +28,8 @@ export function PartsListPage({ createOnMount = false }: { createOnMount?: boole
   const createPart = useCreatePart()
 
   useEffect(() => {
-    if (createOnMount) setFormOpen(true)
-  }, [createOnMount])
+    if (createOnMount && isOwner) setFormOpen(true)
+  }, [createOnMount, isOwner])
 
   const columns = useMemo<Column<Part>[]>(
     () => [
@@ -90,10 +92,12 @@ export function PartsListPage({ createOnMount = false }: { createOnMount?: boole
         <h1 className="text-2xl font-semibold tracking-normal">Repuestos</h1>
         <div className="flex flex-wrap gap-2">
           <DownloadCsvButton href="/api/v1/parts.csv" />
-          <Button type="button" onClick={() => setFormOpen(true)}>
-            <Plus />
-            Nuevo repuesto
-          </Button>
+          {isOwner ? (
+            <Button type="button" onClick={() => setFormOpen(true)}>
+              <Plus />
+              Nuevo repuesto
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -124,7 +128,9 @@ export function PartsListPage({ createOnMount = false }: { createOnMount?: boole
         searchPlaceholder="Buscar por nombre o SKU"
       />
 
-      <PartForm open={formOpen} onOpenChange={closeForm} onSubmit={onCreate} isSubmitting={createPart.isPending} />
+      {isOwner ? (
+        <PartForm open={formOpen} onOpenChange={closeForm} onSubmit={onCreate} isSubmitting={createPart.isPending} />
+      ) : null}
     </div>
   )
 }

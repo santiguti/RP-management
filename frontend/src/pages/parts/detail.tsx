@@ -9,6 +9,7 @@ import { DataTable, type Column } from "@/components/data-table"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useIsOwner } from "@/hooks/use-auth"
 import { useCreateMovement, useDeletePart, usePart, usePartMovements, useUpdatePart } from "@/hooks/use-parts"
 import { formatARSValue } from "@/lib/money"
 import { formatDate } from "@/pages/clients/list"
@@ -28,6 +29,7 @@ const movementLabels: Record<Movement["movement_type"], string> = {
 export function PartDetailPage() {
   const { ucode } = useParams()
   const navigate = useNavigate()
+  const isOwner = useIsOwner()
   const part = usePart(ucode)
   const [movementPage, setMovementPage] = useState(1)
   const movements = usePartMovements(ucode, movementPage, PAGE_SIZE)
@@ -107,15 +109,17 @@ export function PartDetailPage() {
           <h1 className="text-2xl font-semibold tracking-normal">{item.name}</h1>
           {item.sku ? <p className="mt-1 text-sm text-muted-foreground">SKU {item.sku}</p> : null}
         </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
-            <Pencil />
-            Editar
-          </Button>
-          <Button type="button" variant="ghost" size="icon" title="Eliminar repuesto" onClick={() => void onDelete()}>
-            <Trash2 />
-          </Button>
-        </div>
+        {isOwner ? (
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
+              <Pencil />
+              Editar
+            </Button>
+            <Button type="button" variant="ghost" size="icon" title="Eliminar repuesto" onClick={() => void onDelete()}>
+              <Trash2 />
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -160,7 +164,9 @@ export function PartDetailPage() {
         </TabsContent>
       </Tabs>
 
-      <PartForm open={editOpen} onOpenChange={setEditOpen} part={item} onSubmit={onUpdate} isSubmitting={updatePart.isPending} />
+      {isOwner ? (
+        <PartForm open={editOpen} onOpenChange={setEditOpen} part={item} onSubmit={onUpdate} isSubmitting={updatePart.isPending} />
+      ) : null}
       <MovementForm open={movementOpen} onOpenChange={setMovementOpen} part={item} onSubmit={onCreateMovement} isSubmitting={createMovement.isPending} />
     </div>
   )

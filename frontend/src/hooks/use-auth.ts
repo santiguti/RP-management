@@ -10,6 +10,11 @@ export function useAuth() {
   })
 }
 
+export function useIsOwner() {
+  const { data } = useAuth()
+  return data?.role === "owner"
+}
+
 export function useLogin() {
   const qc = useQueryClient()
   return useMutation({

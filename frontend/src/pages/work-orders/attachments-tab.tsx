@@ -7,6 +7,7 @@ import type { WorkOrder } from "@/api/work-orders"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { useIsOwner } from "@/hooks/use-auth"
 import { useAttachments, useDeleteAttachment, useUploadAttachment } from "@/hooks/use-attachments"
 
 const phases: { value: AttachmentPhase; label: string }[] = [
@@ -22,6 +23,7 @@ const maxUploadBytes = 10 * 1024 * 1024
 type UploadProgress = { name: string; state: "subiendo" | "listo" | "error" }
 
 export function AttachmentsTab({ workOrder }: { workOrder: WorkOrder }) {
+  const isOwner = useIsOwner()
   const attachments = useAttachments(workOrder.ucode)
   const upload = useUploadAttachment()
   const remove = useDeleteAttachment()
@@ -127,9 +129,11 @@ export function AttachmentsTab({ workOrder }: { workOrder: WorkOrder }) {
               </button>
               <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
                 <span className="truncate text-sm font-medium">{phaseLabel(attachment.phase)}</span>
-                <Button type="button" variant="ghost" size="icon" title="Eliminar imagen" onClick={() => void onDelete(attachment)}>
-                  <Trash2 />
-                </Button>
+                {isOwner ? (
+                  <Button type="button" variant="ghost" size="icon" title="Eliminar imagen" onClick={() => void onDelete(attachment)}>
+                    <Trash2 />
+                  </Button>
+                ) : null}
               </div>
             </div>
           ))}
