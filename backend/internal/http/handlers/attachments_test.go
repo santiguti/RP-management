@@ -176,6 +176,15 @@ func TestAttachment_Download_OK(t *testing.T) {
 	if got := res.Header.Get("Content-Type"); got != "image/png" {
 		t.Fatalf("Content-Type = %q, want image/png", got)
 	}
+	if got := res.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
+	}
+	if got := res.Header.Get("Cache-Control"); got != "private, max-age=3600" {
+		t.Fatalf("Cache-Control = %q, want private, max-age=3600", got)
+	}
+	if res.ContentLength != int64(len(pngBytes)) {
+		t.Fatalf("ContentLength = %d, want %d", res.ContentLength, len(pngBytes))
+	}
 	got, err := io.ReadAll(res.Body)
 	if err != nil {
 		t.Fatal(err)

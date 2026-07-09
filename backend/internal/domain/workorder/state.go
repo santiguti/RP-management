@@ -121,11 +121,6 @@ func Next(current Status, event Event) (Status, error) {
 	return next, nil
 }
 
-// IsTerminal reports whether the status allows no further transitions.
-func IsTerminal(s Status) bool {
-	return s == StatusDelivered || s == StatusCancelled
-}
-
 // AllowedEvents returns the events available from the current status.
 func AllowedEvents(s Status) []Event {
 	events, ok := transitions[s]

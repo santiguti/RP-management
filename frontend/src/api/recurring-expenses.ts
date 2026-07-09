@@ -1,4 +1,4 @@
-import { apiClient } from "./client"
+import { apiClient } from "./http"
 import type { CounterpartyRef, PaymentMethod, Transaction, TransactionCategory } from "./transactions"
 
 export type RecurringExpenseCategory = Extract<

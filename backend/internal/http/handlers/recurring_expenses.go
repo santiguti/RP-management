@@ -15,6 +15,7 @@ import (
 
 	"github.com/santiguti/rp-management/backend/internal/audit"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	recurringdomain "github.com/santiguti/rp-management/backend/internal/domain/recurring"
 	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
@@ -375,7 +376,7 @@ func toRecurringExpenseDTO(row recurringExpenseEnriched) recurringExpenseDTO {
 	return recurringExpenseDTO{
 		Ucode:             uuidString(row.recurringExpense.Ucode),
 		Name:              row.recurringExpense.Name,
-		Amount:            numericToString(row.recurringExpense.Amount),
+		Amount:            money.NumericToString(row.recurringExpense.Amount),
 		Currency:          row.recurringExpense.Currency,
 		DayOfMonth:        int(row.recurringExpense.DayOfMonth),
 		Category:          row.recurringExpense.Category,

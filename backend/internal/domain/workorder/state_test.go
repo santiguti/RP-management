@@ -183,32 +183,6 @@ func TestNextUnknownInputs(t *testing.T) {
 	}
 }
 
-func TestIsTerminal(t *testing.T) {
-	tests := []struct {
-		status Status
-		want   bool
-	}{
-		{status: StatusReceived, want: false},
-		{status: StatusDiagnosing, want: false},
-		{status: StatusQuoted, want: false},
-		{status: StatusApproved, want: false},
-		{status: StatusRejected, want: false},
-		{status: StatusInRepair, want: false},
-		{status: StatusWaitingParts, want: false},
-		{status: StatusReady, want: false},
-		{status: StatusDelivered, want: true},
-		{status: StatusCancelled, want: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(string(tt.status), func(t *testing.T) {
-			if got := IsTerminal(tt.status); got != tt.want {
-				t.Fatalf("IsTerminal(%q) = %v, want %v", tt.status, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestAllowedEvents(t *testing.T) {
 	tests := []struct {
 		status Status

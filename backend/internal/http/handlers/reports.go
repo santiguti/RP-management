@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 )
 
 type balanceReportDTO struct {
@@ -311,7 +312,7 @@ func subtractMoneyStrings(left, right string) string {
 }
 
 func reportMoneyString(n pgtype.Numeric) string {
-	return decimalRat(numericToString(n)).FloatString(2)
+	return money.NumericToString(n)
 }
 
 func decimalRat(raw string) *big.Rat {

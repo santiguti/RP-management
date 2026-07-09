@@ -429,7 +429,7 @@ func (w *WorkOrders) AddPart(rw http.ResponseWriter, r *http.Request) {
 		"work_order_part": dto,
 		"work_order": map[string]any{
 			"ucode":        uuidString(updated.WorkOrder.Ucode),
-			"parts_amount": numericToString(updated.WorkOrder.PartsAmount),
+			"parts_amount": money.NumericToString(updated.WorkOrder.PartsAmount),
 		},
 	})
 }
@@ -813,11 +813,11 @@ func toWorkOrderDTO(row sqlc.GetWorkOrderByUcodeRow) workOrderDTO {
 		Device:          wODeviceDTO{Ucode: uuidString(row.DeviceUcode), BrandName: row.BrandName, ModelName: stringPtrFromText(row.ModelName), ArticleTypeName: row.ArticleTypeName, SerialNumber: stringPtrFromText(row.DeviceSerial)},
 		ReportedIssue:   row.WorkOrder.ReportedIssue,
 		Diagnosis:       stringPtrFromText(row.WorkOrder.Diagnosis),
-		QuoteAmount:     numericToStringPtr(row.WorkOrder.QuoteAmount),
+		QuoteAmount:     money.NumericToStringPtr(row.WorkOrder.QuoteAmount),
 		QuoteCurrency:   row.WorkOrder.QuoteCurrency,
-		LaborAmount:     numericToStringPtr(row.WorkOrder.LaborAmount),
-		PartsAmount:     numericToStringPtr(row.WorkOrder.PartsAmount),
-		FinalAmount:     numericToStringPtr(row.WorkOrder.FinalAmount),
+		LaborAmount:     money.NumericToStringPtr(row.WorkOrder.LaborAmount),
+		PartsAmount:     money.NumericToStringPtr(row.WorkOrder.PartsAmount),
+		FinalAmount:     money.NumericToStringPtr(row.WorkOrder.FinalAmount),
 		IntakeNotes:     stringPtrFromText(row.WorkOrder.IntakeNotes),
 		Accessories:     stringPtrFromText(row.WorkOrder.Accessories),
 		DevicePin:       stringPtrFromText(row.WorkOrder.DevicePinEncrypted),
@@ -844,11 +844,11 @@ func toWorkOrderDTOFromList(row sqlc.ListWorkOrdersRow) workOrderDTO {
 		Device:          wODeviceDTO{Ucode: uuidString(row.DeviceUcode), BrandName: row.BrandName, ModelName: stringPtrFromText(row.ModelName), ArticleTypeName: row.ArticleTypeName},
 		ReportedIssue:   row.WorkOrder.ReportedIssue,
 		Diagnosis:       stringPtrFromText(row.WorkOrder.Diagnosis),
-		QuoteAmount:     numericToStringPtr(row.WorkOrder.QuoteAmount),
+		QuoteAmount:     money.NumericToStringPtr(row.WorkOrder.QuoteAmount),
 		QuoteCurrency:   row.WorkOrder.QuoteCurrency,
-		LaborAmount:     numericToStringPtr(row.WorkOrder.LaborAmount),
-		PartsAmount:     numericToStringPtr(row.WorkOrder.PartsAmount),
-		FinalAmount:     numericToStringPtr(row.WorkOrder.FinalAmount),
+		LaborAmount:     money.NumericToStringPtr(row.WorkOrder.LaborAmount),
+		PartsAmount:     money.NumericToStringPtr(row.WorkOrder.PartsAmount),
+		FinalAmount:     money.NumericToStringPtr(row.WorkOrder.FinalAmount),
 		IntakeNotes:     stringPtrFromText(row.WorkOrder.IntakeNotes),
 		Accessories:     stringPtrFromText(row.WorkOrder.Accessories),
 		DevicePin:       stringPtrFromText(row.WorkOrder.DevicePinEncrypted),
@@ -863,18 +863,6 @@ func toWorkOrderDTOFromList(row sqlc.ListWorkOrdersRow) workOrderDTO {
 		CancelledTs:     timeStringPtr(row.WorkOrder.CancelledTs),
 		AllowedEvents:   allowedEventStrings(workorder.Status(row.WorkOrder.Status)),
 	}
-}
-
-func numericToStringPtr(n pgtype.Numeric) *string {
-	if !n.Valid {
-		return nil
-	}
-	raw, err := n.MarshalJSON()
-	if err != nil || string(raw) == "null" {
-		return nil
-	}
-	out := strings.Trim(string(raw), `"`)
-	return &out
 }
 
 func numericFromPtr(rw http.ResponseWriter, raw *string) (pgtype.Numeric, bool) {
@@ -903,9 +891,9 @@ func toWoPartDTO(row sqlc.ListWorkOrderPartsRow) woPartDTO {
 		PartUcode:        uuidString(row.PartUcode),
 		PartName:         row.PartName,
 		PartUnit:         row.PartUnit,
-		Quantity:         partNumericToString(row.WorkOrderPart.Quantity),
-		UnitPriceCharged: partNumericToString(row.WorkOrderPart.UnitPriceCharged),
-		CostUnit:         partNumericToStringPtr(row.WorkOrderPart.CostUnit),
+		Quantity:         money.NumericToString(row.WorkOrderPart.Quantity),
+		UnitPriceCharged: money.NumericToString(row.WorkOrderPart.UnitPriceCharged),
+		CostUnit:         money.NumericToStringPtr(row.WorkOrderPart.CostUnit),
 		Subtotal:         subtotal.FloatString(2),
 		CreatedTs:        timeString(row.WorkOrderPart.CreatedTs),
 	}

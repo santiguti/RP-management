@@ -565,10 +565,10 @@ func toPartDTO(part sqlc.Part) partDTO {
 		Name:             part.Name,
 		Description:      stringPtrFromText(part.Description),
 		Unit:             part.Unit,
-		CurrentStock:     partNumericToString(part.CurrentStock),
-		ReorderLevel:     partNumericToStringPtr(part.ReorderLevel),
-		DefaultCost:      partNumericToStringPtr(part.DefaultCost),
-		DefaultSalePrice: partNumericToStringPtr(part.DefaultSalePrice),
+		CurrentStock:     money.NumericToString(part.CurrentStock),
+		ReorderLevel:     money.NumericToStringPtr(part.ReorderLevel),
+		DefaultCost:      money.NumericToStringPtr(part.DefaultCost),
+		DefaultSalePrice: money.NumericToStringPtr(part.DefaultSalePrice),
 		LowStock:         lowStock,
 		CreatedTs:        timeString(part.CreatedTs),
 	}
@@ -582,26 +582,14 @@ func movementDTOFrom(movement sqlc.PartMovement, supplierUcode pgtype.UUID, supp
 	return movementDTO{
 		Ucode:        uuidString(movement.Ucode),
 		MovementType: movement.MovementType,
-		Quantity:     partNumericToString(movement.Quantity),
-		UnitCost:     partNumericToStringPtr(movement.UnitCost),
+		Quantity:     money.NumericToString(movement.Quantity),
+		UnitCost:     money.NumericToStringPtr(movement.UnitCost),
 		Supplier:     counterpartyRefFrom(supplierUcode, supplierName),
 		WorkOrder:    workOrderRefFrom(workOrderUcode, workOrderNumber),
 		Transaction:  transaction,
 		Notes:        stringPtrFromText(movement.Notes),
 		CreatedTs:    timeString(movement.CreatedTs),
 	}
-}
-
-func partNumericToString(n pgtype.Numeric) string {
-	return partdomain.NumericToRat(n).FloatString(2)
-}
-
-func partNumericToStringPtr(n pgtype.Numeric) *string {
-	if !n.Valid {
-		return nil
-	}
-	out := partNumericToString(n)
-	return &out
 }
 
 func parseOptionalNonNegativeNumeric(w http.ResponseWriter, raw *string) (pgtype.Numeric, bool) {

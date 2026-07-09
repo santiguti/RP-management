@@ -1,4 +1,4 @@
-import { apiClient } from "./client"
+import { apiClient } from "./http"
 import type { Device } from "./devices"
 
 export type Client = {

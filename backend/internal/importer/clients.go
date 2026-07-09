@@ -21,6 +21,8 @@ type ParsedClient struct {
 	ClientType string  `json:"client_type"`
 }
 
+var clientRowValidator = validator.New()
+
 func parseClients(f *excelize.File) (Result, error) {
 	rows, err := firstSheetRows(f)
 	if err != nil {
@@ -85,7 +87,7 @@ func validateClientRow(row int, client *ParsedClient) []RowError {
 	}
 
 	if client.Email != nil {
-		if err := validator.New().Var(*client.Email, "email,max=200"); err != nil {
+		if err := clientRowValidator.Var(*client.Email, "email,max=200"); err != nil {
 			errs = append(errs, rowError(row, "email", "Email inválido"))
 		}
 	}

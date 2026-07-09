@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	"github.com/santiguti/rp-management/backend/internal/domain/workorder"
 )
 
@@ -625,7 +626,7 @@ func TestWoParts_AddCreatesMovementAndUpdatesAmount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(updatedPart.CurrentStock); got != "7.00" {
+	if got := money.NumericToString(updatedPart.CurrentStock); got != "7.00" {
 		t.Fatalf("current_stock = %q, want 7.00", got)
 	}
 	rows, err := q.ListPartMovements(context.Background(), sqlc.ListPartMovementsParams{PartID: part.ID, PageSize: 25})
@@ -654,7 +655,7 @@ func TestWoParts_AddDecrementsStockExactly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(updatedPart.CurrentStock); got != "7.50" {
+	if got := money.NumericToString(updatedPart.CurrentStock); got != "7.50" {
 		t.Fatalf("current_stock = %q, want 7.50", got)
 	}
 }
@@ -734,7 +735,7 @@ func TestWoParts_RemoveRestoresStockAndAmount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(updatedPart.CurrentStock); got != "10.00" {
+	if got := money.NumericToString(updatedPart.CurrentStock); got != "10.00" {
 		t.Fatalf("current_stock = %q, want 10.00", got)
 	}
 	get, err := client.Get(ts.URL + "/api/v1/work-orders/" + workOrder.WorkOrder.Ucode)

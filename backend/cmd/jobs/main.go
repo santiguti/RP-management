@@ -15,6 +15,7 @@ import (
 	"github.com/santiguti/rp-management/backend/internal/config"
 	"github.com/santiguti/rp-management/backend/internal/db"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/domain/money"
 	recurringdomain "github.com/santiguti/rp-management/backend/internal/domain/recurring"
 )
 
@@ -162,7 +163,7 @@ func runRecurring(args []string) error {
 
 		if result.Generated {
 			generated++
-			log.Printf("created: rule=%s due=%s amount=%s", rule.Name, result.DueDate.Format("2006-01-02"), numericString(rule.Amount))
+			log.Printf("created: rule=%s due=%s amount=%s", rule.Name, result.DueDate.Format("2006-01-02"), money.NumericToString(rule.Amount))
 		} else {
 			skipped++
 			log.Printf("skipped: rule=%s due=%s last_generated=%s", rule.Name, result.DueDate.Format("2006-01-02"), dateString(rule.LastGeneratedDate))
@@ -223,14 +224,6 @@ func recurringRules(ctx context.Context, q *sqlc.Queries, ruleRaw string, today 
 		return nil, fmt.Errorf("list due rules: %w", err)
 	}
 	return rules, nil
-}
-
-func numericString(n pgtype.Numeric) string {
-	raw, err := n.MarshalJSON()
-	if err != nil || string(raw) == "null" {
-		return ""
-	}
-	return strings.Trim(string(raw), `"`)
 }
 
 func dateString(d pgtype.Date) string {

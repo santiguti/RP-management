@@ -5,7 +5,6 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
-	"io"
 	"log"
 	"net/http"
 	"path/filepath"
@@ -149,10 +148,9 @@ func (a *Attachments) Download(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	w.Header().Set("Content-Type", attachment.MimeType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
-	if _, err := io.Copy(w, f); err != nil {
-		log.Printf("stream attachment: %v", err)
-	}
+	http.ServeContent(w, r, "", attachment.CreatedTs.Time, f)
 }
 
 func (a *Attachments) Delete(w http.ResponseWriter, r *http.Request) {

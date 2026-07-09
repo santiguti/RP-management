@@ -506,9 +506,9 @@ func toTransactionDTO(row transactionEnriched) transactionDTO {
 	return transactionDTO{
 		Ucode:            uuidString(row.transaction.Ucode),
 		TransactionType:  row.transaction.TransactionType,
-		Amount:           numericToString(row.transaction.Amount),
+		Amount:           money.NumericToString(row.transaction.Amount),
 		Currency:         row.transaction.Currency,
-		FxRateToArs:      numericToString(row.transaction.FxRateToArs),
+		FxRateToArs:      money.NumericToString(row.transaction.FxRateToArs),
 		TransactionDate:  dateString(row.transaction.TransactionDate),
 		PaymentMethod:    row.transaction.PaymentMethod,
 		Category:         row.transaction.Category,
@@ -606,13 +606,6 @@ func parseTransactionDate(rw http.ResponseWriter, raw string) (pgtype.Date, bool
 		return pgtype.Date{}, false
 	}
 	return pgtype.Date{Time: parsed, Valid: true}, true
-}
-
-func numericToString(n pgtype.Numeric) string {
-	if out := numericToStringPtr(n); out != nil {
-		return *out
-	}
-	return ""
 }
 
 func dateString(d pgtype.Date) string {

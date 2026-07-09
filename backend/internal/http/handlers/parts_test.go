@@ -398,7 +398,7 @@ func TestMovement_CreatePurchase_OK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(updated.CurrentStock); got != "5.00" {
+	if got := money.NumericToString(updated.CurrentStock); got != "5.00" {
 		t.Fatalf("current_stock = %q, want 5.00", got)
 	}
 }
@@ -446,7 +446,7 @@ WHERE ucode = $1 AND voided_ts IS NULL
 `, body.Movement.Transaction.Ucode).Scan(&amount, &paymentMethod, &category, &counterpartyType); err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(amount); got != "500.00" || paymentMethod != "cash" || category != "part_purchase" || counterpartyType != "supplier" {
+	if got := money.NumericToString(amount); got != "500.00" || paymentMethod != "cash" || category != "part_purchase" || counterpartyType != "supplier" {
 		t.Fatalf("transaction = amount %q payment %q category %q counterparty %q, want 500.00/cash/part_purchase/supplier", got, paymentMethod, category, counterpartyType)
 	}
 }
@@ -492,7 +492,7 @@ func TestMovement_AdjustmentIn_OK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(updated.CurrentStock); got != "3.00" {
+	if got := money.NumericToString(updated.CurrentStock); got != "3.00" {
 		t.Fatalf("current_stock = %q, want 3.00", got)
 	}
 }
@@ -520,7 +520,7 @@ func TestMovement_AdjustmentOut_OK(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := partNumericToString(updated.CurrentStock); got != "3.00" {
+	if got := money.NumericToString(updated.CurrentStock); got != "3.00" {
 		t.Fatalf("current_stock = %q, want 3.00", got)
 	}
 }
