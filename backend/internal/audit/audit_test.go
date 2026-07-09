@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
+	"github.com/santiguti/rp-management/backend/internal/http/middleware"
 )
 
 func TestRecord_InsertsRow(t *testing.T) {
@@ -45,6 +46,34 @@ func TestRecord_FailsSilently(t *testing.T) {
 		Action:     "test.audit.closed_pool",
 		EntityType: "client",
 	})
+}
+
+func TestRecord_SurvivesCanceledContext(t *testing.T) {
+	q, tx := auditTxQueries(t)
+	action := "test.audit.record.canceled_context"
+	actor := seedAuditUser(t, tx)
+	ctx, cancel := context.WithCancel(middleware.WithUser(context.Background(), &actor))
+	cancel()
+
+	Record(ctx, q, httptest.NewRequest("POST", "/", nil), Entry{
+		Action:     action,
+		EntityType: "client",
+		After: map[string]string{
+			"name": "Cliente Audit",
+		},
+	})
+
+	var actorUserID int64
+	if err := tx.QueryRow(context.Background(), `
+SELECT actor_user_id
+FROM rp.audit_log
+WHERE action = $1
+`, action).Scan(&actorUserID); err != nil {
+		t.Fatal(err)
+	}
+	if actorUserID != actor.ID {
+		t.Fatalf("actor_user_id = %d, want %d", actorUserID, actor.ID)
+	}
 }
 
 func TestRecord_NilBeforeAfter(t *testing.T) {
@@ -97,4 +126,30 @@ func auditTxQueries(t *testing.T) (*sqlc.Queries, pgx.Tx) {
 	}
 	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
 	return sqlc.New(pool).WithTx(tx), tx
+}
+
+func seedAuditUser(t *testing.T, tx pgx.Tx) sqlc.User {
+	t.Helper()
+	row := tx.QueryRow(context.Background(), `
+INSERT INTO rp.users (username, password_hash, full_name, role)
+VALUES ('audit-canceled-context', 'hash', 'Audit Canceled Context', 'owner')
+RETURNING id, ucode, created_ts, created_by_user_id, voided_ts, voided_by_user_id, username, password_hash, full_name, role, last_login_ts
+`)
+	var user sqlc.User
+	if err := row.Scan(
+		&user.ID,
+		&user.Ucode,
+		&user.CreatedTs,
+		&user.CreatedByUserID,
+		&user.VoidedTs,
+		&user.VoidedByUserID,
+		&user.Username,
+		&user.PasswordHash,
+		&user.FullName,
+		&user.Role,
+		&user.LastLoginTs,
+	); err != nil {
+		t.Fatal(err)
+	}
+	return user
 }

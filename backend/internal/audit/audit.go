@@ -25,6 +25,8 @@ type Entry struct {
 // Record persists an audit entry after a successful mutation. Failures are
 // logged and intentionally ignored so auditing never breaks the user request.
 func Record(ctx context.Context, q *sqlc.Queries, r *http.Request, e Entry) {
+	ctx = context.WithoutCancel(ctx)
+
 	var actor pgtype.Int8
 	if u, ok := middleware.UserFromContext(ctx); ok {
 		actor = pgtype.Int8{Int64: u.ID, Valid: true}
