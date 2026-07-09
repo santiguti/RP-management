@@ -11,32 +11,30 @@ func newTxQueries(t *testing.T) (*sqlc.Queries, func()) {
 	t.Helper()
 
 	resetTestDB(t)
-	return sqlc.New(testPool), func() { resetTestDB(t) }
+	return sqlc.New(testPool), func() {}
 }
 
 func resetTestDB(t *testing.T) {
 	t.Helper()
 
 	_, err := testPool.Exec(context.Background(), `
-TRUNCATE
-  rp.audit_log,
-  rp.sessions,
-  rp.attachments,
-  rp.work_order_parts,
-  rp.part_movements,
-  rp.parts,
-  rp.transactions,
-  rp.recurring_expenses,
-  rp.suppliers,
-  rp.work_orders,
-  rp.wo_number_counters,
-  rp.devices,
-  rp.clients,
-  rp.device_models,
-  rp.brands,
-  rp.article_types,
-  rp.users
-RESTART IDENTITY CASCADE;
+DELETE FROM rp.audit_log;
+DELETE FROM rp.sessions;
+DELETE FROM rp.attachments;
+DELETE FROM rp.work_order_parts;
+DELETE FROM rp.part_movements;
+DELETE FROM rp.parts;
+DELETE FROM rp.transactions;
+DELETE FROM rp.recurring_expenses;
+DELETE FROM rp.suppliers;
+DELETE FROM rp.work_orders;
+DELETE FROM rp.wo_number_counters;
+DELETE FROM rp.devices;
+DELETE FROM rp.clients;
+DELETE FROM rp.device_models;
+DELETE FROM rp.brands;
+DELETE FROM rp.article_types;
+DELETE FROM rp.users;
 
 INSERT INTO rp.brands (name) VALUES
   ('Samsung'), ('Apple'), ('LG'), ('Philips'), ('Whirlpool'),

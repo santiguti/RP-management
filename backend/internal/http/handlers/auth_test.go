@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,10 @@ import (
 
 var testPool *pgxpool.Pool
 var testAttachmentStore *storage.FileStore
+var (
+	testHashOnce sync.Once
+	testHash     string
+)
 
 func TestMain(m *testing.M) {
 	dsn := os.Getenv("RP_TEST_DATABASE_URL")
@@ -66,7 +71,7 @@ func newPoolQueries(t *testing.T) (*sqlc.Queries, func()) {
 	t.Helper()
 
 	resetTestDB(t)
-	return sqlc.New(testPool), func() { resetTestDB(t) }
+	return sqlc.New(testPool), func() {}
 }
 
 func TestLogin_OK(t *testing.T) {
@@ -179,7 +184,7 @@ func TestMe_OK(t *testing.T) {
 	ts, client := newCookieServer(t, q)
 	defer ts.Close()
 
-	login(t, client, ts.URL, user.Username)
+	httpLogin(t, client, ts.URL, user.Username)
 	res, err := client.Get(ts.URL + "/api/v1/auth/me")
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +212,7 @@ func TestLogout_OK(t *testing.T) {
 	ts, client := newCookieServer(t, q)
 	defer ts.Close()
 
-	csrf := login(t, client, ts.URL, user.Username)
+	csrf := httpLogin(t, client, ts.URL, user.Username)
 	oldSession := jarCookie(t, client, ts.URL, "rp_session")
 	res := postJSON(t, client, ts.URL+"/api/v1/auth/logout", nil, csrf)
 	defer res.Body.Close()
@@ -233,7 +238,7 @@ func TestCSRF_RejectsMissingHeader(t *testing.T) {
 	ts, client := newCookieServer(t, q)
 	defer ts.Close()
 
-	login(t, client, ts.URL, user.Username)
+	httpLogin(t, client, ts.URL, user.Username)
 	res := postJSON(t, client, ts.URL+"/api/v1/auth/logout", nil, "")
 	defer res.Body.Close()
 
@@ -248,7 +253,7 @@ func TestCSRF_RejectsWrongHeader(t *testing.T) {
 	ts, client := newCookieServer(t, q)
 	defer ts.Close()
 
-	login(t, client, ts.URL, user.Username)
+	httpLogin(t, client, ts.URL, user.Username)
 	res := postJSON(t, client, ts.URL+"/api/v1/auth/logout", nil, "not-the-cookie")
 	defer res.Body.Close()
 
@@ -402,13 +407,9 @@ func testRouter(q *sqlc.Queries) http.Handler {
 func seedOwner(t *testing.T, q *sqlc.Queries) sqlc.User {
 	t.Helper()
 
-	hash, err := auth.Hash("pw")
-	if err != nil {
-		t.Fatal(err)
-	}
 	user, err := q.CreateUser(context.Background(), sqlc.CreateUserParams{
 		Username:        uniqueUsername(t),
-		PasswordHash:    hash,
+		PasswordHash:    testPasswordHash(t),
 		FullName:        "Test Owner",
 		Role:            "owner",
 		CreatedByUserID: pgtype.Int8{},
@@ -420,6 +421,19 @@ func seedOwner(t *testing.T, q *sqlc.Queries) sqlc.User {
 		_, _ = testPool.Exec(context.Background(), `DELETE FROM rp.users WHERE id = $1`, user.ID)
 	})
 	return user
+}
+
+func testPasswordHash(t *testing.T) string {
+	t.Helper()
+
+	testHashOnce.Do(func() {
+		hash, err := auth.Hash("pw")
+		if err != nil {
+			t.Fatal(err)
+		}
+		testHash = hash
+	})
+	return testHash
 }
 
 func newCookieServer(t *testing.T, q *sqlc.Queries) (*httptest.Server, *http.Client) {
@@ -436,7 +450,57 @@ func newCookieServer(t *testing.T, q *sqlc.Queries) (*httptest.Server, *http.Cli
 	return ts, client
 }
 
+func seedSession(t *testing.T, q *sqlc.Queries, client *http.Client, baseURL string, user sqlc.User) string {
+	t.Helper()
+
+	if client.Jar == nil {
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client.Jar = jar
+	}
+
+	token, err := auth.NewSessionToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	csrf, err := auth.NewCSRFToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := q.CreateSession(context.Background(), sqlc.CreateSessionParams{
+		ID:        auth.HashSessionToken(token),
+		UserID:    user.ID,
+		ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(30 * 24 * time.Hour), Valid: true},
+		UserAgent: pgtype.Text{String: "handler-test", Valid: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.Jar.SetCookies(u, []*http.Cookie{
+		sessionCookie(config.Config{AppEnv: "dev"}, token, sessionMaxAge),
+		csrfCookie(config.Config{AppEnv: "dev"}, csrf, sessionMaxAge),
+	})
+	return csrf
+}
+
 func login(t *testing.T, client *http.Client, baseURL, username string) string {
+	t.Helper()
+
+	q := sqlc.New(testPool)
+	user, err := q.GetUserByUsername(context.Background(), username)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seedSession(t, q, client, baseURL, user)
+}
+
+func httpLogin(t *testing.T, client *http.Client, baseURL, username string) string {
 	t.Helper()
 
 	res := postJSON(t, client, baseURL+"/api/v1/auth/login", map[string]string{

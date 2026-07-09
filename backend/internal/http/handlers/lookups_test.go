@@ -10,7 +10,6 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/santiguti/rp-management/backend/internal/auth"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 )
 
@@ -249,13 +248,9 @@ func TestArticleTypes_UpdateAndDelete(t *testing.T) {
 func seedUserWithRole(t *testing.T, q *sqlc.Queries, role string) sqlc.User {
 	t.Helper()
 
-	hash, err := auth.Hash("pw")
-	if err != nil {
-		t.Fatal(err)
-	}
 	user, err := q.CreateUser(context.Background(), sqlc.CreateUserParams{
 		Username:        uniqueUsername(t),
-		PasswordHash:    hash,
+		PasswordHash:    testPasswordHash(t),
 		FullName:        "Test " + strings.Title(role),
 		Role:            role,
 		CreatedByUserID: pgtype.Int8{},
