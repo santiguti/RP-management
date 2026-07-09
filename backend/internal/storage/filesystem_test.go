@@ -77,6 +77,26 @@ func TestFileStore_OpenRoundTrip(t *testing.T) {
 	}
 }
 
+func TestFileStore_Remove(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, _, _, err := store.Save("wo-test", bytes.NewReader(testPNG(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Remove(rel); err != nil {
+		t.Fatal(err)
+	}
+	if f, err := store.Open(rel); err == nil {
+		_ = f.Close()
+		t.Fatal("open removed file succeeded")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("err = %v, want os.ErrNotExist", err)
+	}
+}
+
 func TestFileStore_OpenRejectsTraversal(t *testing.T) {
 	store, err := New(t.TempDir())
 	if err != nil {

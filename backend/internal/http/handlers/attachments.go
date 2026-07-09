@@ -97,6 +97,9 @@ func (a *Attachments) Upload(w http.ResponseWriter, r *http.Request) {
 		UploadedByUserID: pgtype.Int8{Int64: user.ID, Valid: true},
 	})
 	if err != nil {
+		if removeErr := a.store.Remove(relPath); removeErr != nil {
+			log.Printf("remove orphaned attachment file %s: %v", relPath, removeErr)
+		}
 		log.Printf("create attachment: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return

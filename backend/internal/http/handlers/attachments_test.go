@@ -3,15 +3,22 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"image/png"
 	"io"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 	"github.com/santiguti/rp-management/backend/internal/storage"
@@ -99,6 +106,28 @@ func TestAttachment_RejectsInvalidPhase_400(t *testing.T) {
 	res := uploadAttachment(t, client, ts.URL, csrf, workOrder.WorkOrder.Ucode, "otro", "equipo.png", attachmentPNG(t))
 	defer res.Body.Close()
 	assertError(t, res, http.StatusBadRequest, "invalid_phase")
+}
+
+func TestAttachment_UploadRemovesFileWhenDBInsertFails(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	fixture := seedClientAndDevice(t, q, "Cliente Orphan", "WO-ATT-ORPHAN")
+	workOrder := seedWorkOrder(t, q, fixture.client.ID, fixture.device.ID)
+	filesBefore := countStoredAttachmentFiles(t)
+
+	failingQueries := sqlc.New(failCreateAttachmentDB{DBTX: testPool})
+	ts, client := newCookieServer(t, failingQueries)
+	defer ts.Close()
+	csrf := login(t, client, ts.URL, user.Username)
+
+	res := uploadAttachment(t, client, ts.URL, csrf, uuidString(workOrder.Ucode), "intake", "equipo.png", attachmentPNG(t))
+	defer res.Body.Close()
+	assertError(t, res, http.StatusInternalServerError, "internal")
+
+	if filesAfter := countStoredAttachmentFiles(t); filesAfter != filesBefore {
+		t.Fatalf("stored files = %d, want %d", filesAfter, filesBefore)
+	}
 }
 
 func TestAttachment_List_OrdersByCreatedAsc(t *testing.T) {
@@ -309,4 +338,49 @@ func attachmentJPEG(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+func countStoredAttachmentFiles(t *testing.T) int {
+	t.Helper()
+	var count int
+	err := filepath.WalkDir(testAttachmentStore.Root, func(_ string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.Type().IsRegular() {
+			count++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+type failCreateAttachmentDB struct {
+	sqlc.DBTX
+}
+
+func (db failCreateAttachmentDB) QueryRow(ctx context.Context, query string, args ...interface{}) pgx.Row {
+	if strings.Contains(query, "INSERT INTO rp.attachments") {
+		return errRow{err: errors.New("forced attachment insert failure")}
+	}
+	return db.DBTX.QueryRow(ctx, query, args...)
+}
+
+func (db failCreateAttachmentDB) Query(ctx context.Context, query string, args ...interface{}) (pgx.Rows, error) {
+	return db.DBTX.Query(ctx, query, args...)
+}
+
+func (db failCreateAttachmentDB) Exec(ctx context.Context, query string, args ...interface{}) (pgconn.CommandTag, error) {
+	return db.DBTX.Exec(ctx, query, args...)
+}
+
+type errRow struct {
+	err error
+}
+
+func (r errRow) Scan(...interface{}) error {
+	return r.err
 }

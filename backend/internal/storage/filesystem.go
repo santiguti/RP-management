@@ -99,6 +99,14 @@ func (s *FileStore) Open(relPath string) (*os.File, error) {
 	return os.Open(absPath)
 }
 
+func (s *FileStore) Remove(relPath string) error {
+	absPath, err := s.resolve(relPath)
+	if err != nil {
+		return err
+	}
+	return os.Remove(absPath)
+}
+
 func (s *FileStore) resolve(relPath string) (string, error) {
 	clean, err := cleanRelativePath(relPath)
 	if err != nil {
