@@ -18,6 +18,8 @@ type Exports struct {
 	queries *sqlc.Queries
 }
 
+var exportPageSize int32 = 5000
+
 func NewExports(q *sqlc.Queries) *Exports {
 	return &Exports{queries: q}
 }
@@ -27,96 +29,102 @@ func (e *Exports) Transactions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows, err := e.queries.ListTransactions(r.Context(), params)
-	if err != nil {
-		log.Printf("export transactions: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
 	writeCSV(w, "movimientos-"+time.Now().UTC().Format("2006-01-02")+".csv", []string{
 		"Fecha", "Tipo", "Categoría", "Método", "Contraparte", "Orden", "Monto", "Moneda", "Descripción",
 	}, func(cw *csv.Writer) error {
-		for _, row := range rows {
-			dto := toTransactionDTO(enrichedFromListTransaction(row))
-			if err := cw.Write([]string{
-				dto.TransactionDate,
-				i18n.Lookup(i18n.TransactionType, dto.TransactionType),
-				i18n.Lookup(i18n.Category, dto.Category),
-				i18n.Lookup(i18n.PaymentMethod, dto.PaymentMethod),
-				transactionCounterpartyLabel(dto),
-				transactionWorkOrderLabel(dto),
-				dto.Amount,
-				dto.Currency,
-				stringValue(dto.Description),
-			}); err != nil {
+		params.PageSize = exportPageSize
+		for offset := int32(0); ; offset += exportPageSize {
+			params.PageOffset = offset
+			rows, err := e.queries.ListTransactions(r.Context(), params)
+			if err != nil {
 				return err
 			}
+			for _, row := range rows {
+				dto := toTransactionDTO(enrichedFromListTransaction(row))
+				if err := cw.Write([]string{
+					dto.TransactionDate,
+					i18n.Lookup(i18n.TransactionType, dto.TransactionType),
+					i18n.Lookup(i18n.Category, dto.Category),
+					i18n.Lookup(i18n.PaymentMethod, dto.PaymentMethod),
+					transactionCounterpartyLabel(dto),
+					transactionWorkOrderLabel(dto),
+					dto.Amount,
+					dto.Currency,
+					stringValue(dto.Description),
+				}); err != nil {
+					return err
+				}
+			}
+			if len(rows) < int(exportPageSize) {
+				return nil
+			}
 		}
-		return nil
 	})
 }
 
 func (e *Exports) Clients(w http.ResponseWriter, r *http.Request) {
-	rows, err := e.queries.SearchClients(r.Context(), sqlc.SearchClientsParams{
-		PageSize:   10000,
-		PageOffset: 0,
-	})
-	if err != nil {
-		log.Printf("export clients: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
 	writeCSV(w, "clientes-"+time.Now().UTC().Format("2006-01-02")+".csv", []string{
 		"Nombre", "Tipo", "Teléfono", "Email", "DNI/CUIT", "Dirección", "Notas", "Creado",
 	}, func(cw *csv.Writer) error {
-		for _, row := range rows {
-			dto := toClientDTO(row)
-			if err := cw.Write([]string{
-				dto.Name,
-				dto.ClientType,
-				stringValue(dto.Phone),
-				stringValue(dto.Email),
-				stringValue(dto.DniCuit),
-				stringValue(dto.Address),
-				stringValue(dto.Notes),
-				dto.CreatedTs,
-			}); err != nil {
+		params := sqlc.SearchClientsParams{PageSize: exportPageSize}
+		for offset := int32(0); ; offset += exportPageSize {
+			params.PageOffset = offset
+			rows, err := e.queries.SearchClients(r.Context(), params)
+			if err != nil {
 				return err
 			}
+			for _, row := range rows {
+				dto := toClientDTO(row)
+				if err := cw.Write([]string{
+					dto.Name,
+					dto.ClientType,
+					stringValue(dto.Phone),
+					stringValue(dto.Email),
+					stringValue(dto.DniCuit),
+					stringValue(dto.Address),
+					stringValue(dto.Notes),
+					dto.CreatedTs,
+				}); err != nil {
+					return err
+				}
+			}
+			if len(rows) < int(exportPageSize) {
+				return nil
+			}
 		}
-		return nil
 	})
 }
 
 func (e *Exports) Parts(w http.ResponseWriter, r *http.Request) {
-	rows, err := e.queries.SearchParts(r.Context(), sqlc.SearchPartsParams{
-		PageSize:   10000,
-		PageOffset: 0,
-	})
-	if err != nil {
-		log.Printf("export parts: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
-	}
 	writeCSV(w, "repuestos-"+time.Now().UTC().Format("2006-01-02")+".csv", []string{
 		"Nombre", "SKU", "Unidad", "Stock actual", "Punto de reposición", "Costo", "Precio venta", "Creado",
 	}, func(cw *csv.Writer) error {
-		for _, row := range rows {
-			dto := toPartDTO(row)
-			if err := cw.Write([]string{
-				dto.Name,
-				stringValue(dto.Sku),
-				dto.Unit,
-				dto.CurrentStock,
-				stringValue(dto.ReorderLevel),
-				stringValue(dto.DefaultCost),
-				stringValue(dto.DefaultSalePrice),
-				dto.CreatedTs,
-			}); err != nil {
+		params := sqlc.SearchPartsParams{PageSize: exportPageSize}
+		for offset := int32(0); ; offset += exportPageSize {
+			params.PageOffset = offset
+			rows, err := e.queries.SearchParts(r.Context(), params)
+			if err != nil {
 				return err
 			}
+			for _, row := range rows {
+				dto := toPartDTO(row)
+				if err := cw.Write([]string{
+					dto.Name,
+					stringValue(dto.Sku),
+					dto.Unit,
+					dto.CurrentStock,
+					stringValue(dto.ReorderLevel),
+					stringValue(dto.DefaultCost),
+					stringValue(dto.DefaultSalePrice),
+					dto.CreatedTs,
+				}); err != nil {
+					return err
+				}
+			}
+			if len(rows) < int(exportPageSize) {
+				return nil
+			}
 		}
-		return nil
 	})
 }
 
@@ -126,37 +134,40 @@ func (e *Exports) WorkOrders(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_status"})
 		return
 	}
-	rows, err := e.queries.ListWorkOrders(r.Context(), sqlc.ListWorkOrdersParams{
-		Status:     status,
-		Q:          strings.TrimSpace(r.URL.Query().Get("q")),
-		PageSize:   10000,
-		PageOffset: 0,
-	})
-	if err != nil {
-		log.Printf("export work orders: %v", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})
-		return
+	params := sqlc.ListWorkOrdersParams{
+		Status:   status,
+		Q:        strings.TrimSpace(r.URL.Query().Get("q")),
+		PageSize: exportPageSize,
 	}
 	writeCSV(w, "ordenes-"+time.Now().UTC().Format("2006-01-02")+".csv", []string{
 		"Número", "Estado", "Tipo de servicio", "Cliente", "Dispositivo", "Recibida", "Total mano de obra", "Total repuestos", "Total final",
 	}, func(cw *csv.Writer) error {
-		for _, row := range rows {
-			dto := toWorkOrderDTOFromList(row)
-			if err := cw.Write([]string{
-				dto.WoNumber,
-				i18n.Lookup(i18n.WorkOrderStatus, dto.Status),
-				i18n.Lookup(i18n.ServiceType, dto.ServiceType),
-				dto.Client.Name,
-				workOrderDeviceLabel(dto.Device),
-				dto.ReceivedTs,
-				stringValue(dto.LaborAmount),
-				stringValue(dto.PartsAmount),
-				stringValue(dto.FinalAmount),
-			}); err != nil {
+		for offset := int32(0); ; offset += exportPageSize {
+			params.PageOffset = offset
+			rows, err := e.queries.ListWorkOrders(r.Context(), params)
+			if err != nil {
 				return err
 			}
+			for _, row := range rows {
+				dto := toWorkOrderDTOFromList(row)
+				if err := cw.Write([]string{
+					dto.WoNumber,
+					i18n.Lookup(i18n.WorkOrderStatus, dto.Status),
+					i18n.Lookup(i18n.ServiceType, dto.ServiceType),
+					dto.Client.Name,
+					workOrderDeviceLabel(dto.Device),
+					dto.ReceivedTs,
+					stringValue(dto.LaborAmount),
+					stringValue(dto.PartsAmount),
+					stringValue(dto.FinalAmount),
+				}); err != nil {
+					return err
+				}
+			}
+			if len(rows) < int(exportPageSize) {
+				return nil
+			}
 		}
-		return nil
 	})
 }
 
@@ -175,8 +186,7 @@ func (e *Exports) transactionExportParams(w http.ResponseWriter, r *http.Request
 	params := sqlc.ListTransactionsParams{
 		TransactionType: transactionType,
 		Category:        category,
-		PageSize:        10000,
-		PageOffset:      0,
+		PageSize:        exportPageSize,
 	}
 	if raw := strings.TrimSpace(q.Get("from")); raw != "" {
 		date, ok := parseTransactionDateForExport(w, raw)

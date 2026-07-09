@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -40,6 +41,41 @@ func TestExport_TransactionsCSV_FiltersHonored(t *testing.T) {
 	records := getCSV(t, client, ts.URL+"/api/v1/transactions.csv?type=income")
 	if len(records) != 2 || records[1][1] != "Ingreso" {
 		t.Fatalf("records = %v, want only income row", records)
+	}
+}
+
+func TestExport_TransactionsCSV_PagesPastLimit(t *testing.T) {
+	previousPageSize := exportPageSize
+	exportPageSize = 3
+	t.Cleanup(func() { exportPageSize = previousPageSize })
+
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	user := seedOwner(t, q)
+	for i := 0; i < 12; i++ {
+		seedTransaction(t, q, transactionSeed{
+			Category:    "rent",
+			Date:        fmt.Sprintf("2026-05-%02d", i+1),
+			Description: fmt.Sprintf("tx page %02d", i),
+		})
+	}
+	ts, client := newCookieServer(t, q)
+	defer ts.Close()
+	login(t, client, ts.URL, user.Username)
+
+	records := getCSV(t, client, ts.URL+"/api/v1/transactions.csv")
+	if len(records) != 13 {
+		t.Fatalf("records len = %d, want 13: %v", len(records), records)
+	}
+	descriptions := make(map[string]bool, len(records)-1)
+	for _, record := range records[1:] {
+		descriptions[record[8]] = true
+	}
+	for i := 0; i < 12; i++ {
+		want := fmt.Sprintf("tx page %02d", i)
+		if !descriptions[want] {
+			t.Fatalf("missing description %q in %v", want, descriptions)
+		}
 	}
 }
 
