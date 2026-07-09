@@ -19,6 +19,6 @@ WHERE id = $1;
 DELETE FROM rp.sessions
 WHERE id = $1;
 
--- name: DeleteExpiredSessions :exec
+-- name: DeleteExpiredSessions :execrows
 DELETE FROM rp.sessions
 WHERE expires_at < now();

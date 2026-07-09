@@ -31,6 +31,10 @@ func main() {
 		if err := runRecurring(os.Args[2:]); err != nil {
 			log.Fatalf("run-recurring: %v", err)
 		}
+	case "cleanup-sessions":
+		if err := cleanupSessions(os.Args[2:]); err != nil {
+			log.Fatalf("cleanup-sessions: %v", err)
+		}
 	case "-h", "--help", "help":
 		usage(0)
 	default:
@@ -49,6 +53,7 @@ func usage(code int) {
 	fmt.Fprintln(out, "subcommands:")
 	fmt.Fprintln(out, "  seed-owner --username <u> --password <p> [--full-name <name>]")
 	fmt.Fprintln(out, "  run-recurring [--rule <ucode>] [--at YYYY-MM-DD]")
+	fmt.Fprintln(out, "  cleanup-sessions")
 	os.Exit(code)
 }
 
@@ -164,6 +169,38 @@ func runRecurring(args []string) error {
 		}
 	}
 	log.Printf("generated=%d skipped=%d", generated, skipped)
+	return nil
+}
+
+func cleanupSessions(args []string) error {
+	fs := flag.NewFlagSet("cleanup-sessions", flag.ExitOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		fs.Usage()
+		return fmt.Errorf("unexpected argument: %s", fs.Arg(0))
+	}
+
+	cfg, err := config.LoadForJobs()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	q := sqlc.New(pool)
+	deleted, err := q.DeleteExpiredSessions(ctx)
+	if err != nil {
+		return fmt.Errorf("delete expired sessions: %w", err)
+	}
+	log.Printf("deleted expired sessions count=%d", deleted)
 	return nil
 }
 

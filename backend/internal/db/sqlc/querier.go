@@ -36,7 +36,7 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateWorkOrder(ctx context.Context, arg CreateWorkOrderParams) (WorkOrder, error)
 	CreateWorkOrderPart(ctx context.Context, arg CreateWorkOrderPartParams) (WorkOrderPart, error)
-	DeleteExpiredSessions(ctx context.Context) error
+	DeleteExpiredSessions(ctx context.Context) (int64, error)
 	DeleteSession(ctx context.Context, id []byte) error
 	GetArticleTypeByUcode(ctx context.Context, ucode pgtype.UUID) (ArticleType, error)
 	GetAttachmentByUcode(ctx context.Context, ucode pgtype.UUID) (Attachment, error)

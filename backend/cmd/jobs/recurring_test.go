@@ -104,6 +104,33 @@ func TestRunNow_SingleRule(t *testing.T) {
 	}
 }
 
+func TestCleanupSessionsDeletesOnlyExpired(t *testing.T) {
+	resetJobsTestDB(t)
+	userID := seedJobUser(t)
+	expiredID := []byte("expired-test-hash")
+	activeID := []byte("active-test-hash")
+	_, err := testPool.Exec(context.Background(), `
+INSERT INTO rp.sessions (id, user_id, expires_at)
+VALUES
+  ($1, $2, now() - interval '1 day'),
+  ($3, $2, now() + interval '1 day')
+`, expiredID, userID, activeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cleanupSessions(nil); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := countJobSessions(t, expiredID); got != 0 {
+		t.Fatalf("expired sessions = %d, want 0", got)
+	}
+	if got := countJobSessions(t, activeID); got != 1 {
+		t.Fatalf("active sessions = %d, want 1", got)
+	}
+}
+
 type jobRecurringSeed struct {
 	Name              string
 	Amount            string
@@ -195,6 +222,19 @@ func seedJobRecurringExpense(t *testing.T, q *sqlc.Queries, seed jobRecurringSee
 	return rule
 }
 
+func seedJobUser(t *testing.T) int64 {
+	t.Helper()
+	var id int64
+	if err := testPool.QueryRow(context.Background(), `
+INSERT INTO rp.users (username, password_hash, full_name, role)
+VALUES ('session-cleanup-owner', 'hash', 'Session Cleanup Owner', 'owner')
+RETURNING id
+`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
 func countJobTransactionsForRecurring(t *testing.T, recurringID int64) int64 {
 	t.Helper()
 	var count int64
@@ -204,6 +244,19 @@ FROM rp.transactions
 WHERE recurring_expense_id = $1
   AND voided_ts IS NULL
 `, recurringID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func countJobSessions(t *testing.T, id []byte) int64 {
+	t.Helper()
+	var count int64
+	if err := testPool.QueryRow(context.Background(), `
+SELECT count(*)::bigint
+FROM rp.sessions
+WHERE id = $1
+`, id).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	return count
