@@ -378,6 +378,10 @@ func (p *Parts) CreateMovement(w http.ResponseWriter, r *http.Request) {
 	} else {
 		movement, err = p.queries.CreatePartMovement(r.Context(), params)
 	}
+	if isCheckViolation(err) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "insufficient_stock"})
+		return
+	}
 	if err != nil {
 		log.Printf("create part movement: %v", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal"})

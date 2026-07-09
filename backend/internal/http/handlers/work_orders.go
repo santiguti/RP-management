@@ -357,6 +357,10 @@ func (w *WorkOrders) AddPart(rw http.ResponseWriter, r *http.Request) {
 		Notes:           pgtype.Text{String: "WO " + workOrder.WorkOrder.WoNumber, Valid: true},
 		CreatedByUserID: pgtype.Int8{Int64: user.ID, Valid: true},
 	})
+	if isCheckViolation(err) {
+		writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "insufficient_stock"})
+		return
+	}
 	if err != nil {
 		log.Printf("create use movement: %v", err)
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
@@ -382,6 +386,10 @@ func (w *WorkOrders) AddPart(rw http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := tx.Commit(r.Context()); err != nil {
+		if isCheckViolation(err) {
+			writeJSON(rw, http.StatusBadRequest, map[string]string{"error": "insufficient_stock"})
+			return
+		}
 		log.Printf("commit add work order part: %v", err)
 		writeJSON(rw, http.StatusInternalServerError, map[string]string{"error": "internal"})
 		return

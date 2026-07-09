@@ -524,6 +524,21 @@ func TestMovement_AdjustmentOut_InsufficientStock_400(t *testing.T) {
 	assertError(t, res, http.StatusBadRequest, "insufficient_stock")
 }
 
+func TestMovement_DBConstraintRejectsNegativeStock(t *testing.T) {
+	q, cleanup := newTxQueries(t)
+	defer cleanup()
+	part := seedPart(t, q, partSeed{Name: "Backstop"})
+
+	_, err := q.CreatePartMovement(context.Background(), sqlc.CreatePartMovementParams{
+		PartID:       part.ID,
+		MovementType: "use",
+		Quantity:     optionalTestNumeric(t, "-1.00"),
+	})
+	if !isCheckViolation(err) {
+		t.Fatalf("err = %v, want check violation", err)
+	}
+}
+
 func TestMovement_RejectsUseFromManualEndpoint_400(t *testing.T) {
 	q, cleanup := newTxQueries(t)
 	defer cleanup()

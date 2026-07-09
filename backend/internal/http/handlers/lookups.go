@@ -375,6 +375,11 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 
+func isCheckViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23514"
+}
+
 func toBrandDTO(b sqlc.Brand) lookupDTO {
 	return lookupDTO{Ucode: uuidString(b.Ucode), Name: b.Name}
 }
