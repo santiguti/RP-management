@@ -1,0 +1,23 @@
+# Single internal entrypoint behind the Cloudflare Tunnel (and for direct LAN
+# access). TLS terminates at Cloudflare's edge; inside the compose network we
+# speak plain HTTP, so Caddy only listens on :80 and never tries to issue
+# certificates.
+{
+	auto_https off
+}
+
+:80 {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy api:8080
+	}
+
+	handle /healthz {
+		reverse_proxy api:8080
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}

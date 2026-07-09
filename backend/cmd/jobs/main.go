@@ -36,6 +36,10 @@ func main() {
 		if err := cleanupSessions(os.Args[2:]); err != nil {
 			log.Fatalf("cleanup-sessions: %v", err)
 		}
+	case "set-password":
+		if err := setPassword(os.Args[2:]); err != nil {
+			log.Fatalf("set-password: %v", err)
+		}
 	case "-h", "--help", "help":
 		usage(0)
 	default:
@@ -55,7 +59,52 @@ func usage(code int) {
 	fmt.Fprintln(out, "  seed-owner --username <u> --password <p> [--full-name <name>]")
 	fmt.Fprintln(out, "  run-recurring [--rule <ucode>] [--at YYYY-MM-DD]")
 	fmt.Fprintln(out, "  cleanup-sessions")
+	fmt.Fprintln(out, "  set-password --username <u> --password <p>")
 	os.Exit(code)
+}
+
+func setPassword(args []string) error {
+	fs := flag.NewFlagSet("set-password", flag.ExitOnError)
+	username := fs.String("username", "", "username (required)")
+	password := fs.String("password", "", "new plaintext password (required)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *username == "" || *password == "" {
+		fs.Usage()
+		return fmt.Errorf("--username and --password are required")
+	}
+
+	cfg, err := config.LoadForJobs()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	hash, err := auth.Hash(*password)
+	if err != nil {
+		return err
+	}
+
+	updated, err := sqlc.New(pool).UpdateUserPassword(ctx, sqlc.UpdateUserPasswordParams{
+		Username:     *username,
+		PasswordHash: hash,
+	})
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+	if updated == 0 {
+		return fmt.Errorf("no active user with username %q", *username)
+	}
+	log.Printf("password updated for username=%s", *username)
+	return nil
 }
 
 func seedOwner(args []string) error {

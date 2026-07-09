@@ -8,7 +8,9 @@ services:
     env_file:
       - ../.env
     ports:
-      - "5432:5432"
+      # Bound to loopback only: psql from the server itself works,
+      # nothing on the LAN can reach Postgres directly.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -28,8 +30,8 @@ services:
     restart: unless-stopped
     env_file:
       - ../.env
-    ports:
-      - "8080:8080"
+    volumes:
+      - attachments:/app/data/attachments
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,11 +43,38 @@ services:
       dockerfile: Dockerfile
     container_name: rp_web
     restart: unless-stopped
-    ports:
-      - "5173:80"
     depends_on:
       - api
+
+  # Single entrypoint: serves the SPA and proxies /api/* to the Go API.
+  # Port 80 is the only LAN-visible port — the shop can use http://<server-ip>
+  # even if the internet (and therefore the tunnel) is down.
+  caddy:
+    image: caddy:2-alpine
+    container_name: rp_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
+
+  # Outbound-only connection to Cloudflare's edge; no inbound ports at all.
+  # TUNNEL_TOKEN comes from ../.env (see .env.example).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: rp_cloudflared
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    command: tunnel --no-autoupdate run
+    depends_on:
+      - caddy
 
 volumes:
   pgdata:
     name: rp_pgdata
+  attachments:
+    name: rp_attachments

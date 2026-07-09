@@ -112,3 +112,23 @@ func (q *Queries) UpdateUserLastLogin(ctx context.Context, id int64) error {
 	_, err := q.db.Exec(ctx, updateUserLastLogin, id)
 	return err
 }
+
+const updateUserPassword = `-- name: UpdateUserPassword :execrows
+UPDATE rp.users
+SET password_hash = $2
+WHERE username = $1
+  AND voided_ts IS NULL
+`
+
+type UpdateUserPasswordParams struct {
+	Username     string `json:"username"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateUserPassword, arg.Username, arg.PasswordHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/santiguti/rp-management/backend/internal/auth"
 	"github.com/santiguti/rp-management/backend/internal/db/sqlc"
 )
 
@@ -145,6 +146,37 @@ VALUES
 	}
 	if got := countJobSessions(t, activeID); got != 1 {
 		t.Fatalf("active sessions = %d, want 1", got)
+	}
+}
+
+func TestSetPassword_UpdatesHash(t *testing.T) {
+	resetJobsTestDB(t)
+	seedJobUser(t)
+
+	if err := setPassword([]string{"--username", "session-cleanup-owner", "--password", "nueva-clave"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var hash string
+	if err := testPool.QueryRow(context.Background(), `
+SELECT password_hash FROM rp.users WHERE username = 'session-cleanup-owner'
+`).Scan(&hash); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := auth.Verify("nueva-clave", hash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("new password does not verify against stored hash")
+	}
+}
+
+func TestSetPassword_UnknownUser(t *testing.T) {
+	resetJobsTestDB(t)
+
+	if err := setPassword([]string{"--username", "no-such-user", "--password", "x"}); err == nil {
+		t.Fatal("expected error for unknown username")
 	}
 }
 

@@ -19,3 +19,9 @@ RETURNING *;
 UPDATE rp.users
 SET last_login_ts = now()
 WHERE id = $1;
+
+-- name: UpdateUserPassword :execrows
+UPDATE rp.users
+SET password_hash = $2
+WHERE username = $1
+  AND voided_ts IS NULL;

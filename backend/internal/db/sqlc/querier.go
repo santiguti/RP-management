@@ -111,6 +111,7 @@ type Querier interface {
 	UpdateSupplier(ctx context.Context, arg UpdateSupplierParams) (Supplier, error)
 	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)
 	UpdateUserLastLogin(ctx context.Context, id int64) error
+	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) (int64, error)
 	UpdateWorkOrderFields(ctx context.Context, arg UpdateWorkOrderFieldsParams) (WorkOrder, error)
 	UpdateWorkOrderStatus(ctx context.Context, arg UpdateWorkOrderStatusParams) (WorkOrder, error)
 }
