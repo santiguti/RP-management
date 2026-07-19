@@ -67,6 +67,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: rp_cloudflared
     restart: unless-stopped
+    # Optional: only starts with `docker compose --profile tunnel up -d`.
+    # Without a domain/token the app is LAN-only, which is fully functional.
+    profiles: ["tunnel"]
     env_file:
       - ../.env
     command: tunnel --no-autoupdate run

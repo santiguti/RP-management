@@ -280,9 +280,13 @@ docker compose exec api /app/jobs set-password --username lucas --password '<new
 
 **LAN test — do this now**: from any device on the shop network, open `http://<server-ip>` → login page → log in as the owner. This works with zero internet; it's also the fallback if Cloudflare is ever down.
 
-### 3.7 Cloudflare Tunnel — public HTTPS access, from zero
+### 3.7 Cloudflare Tunnel — public HTTPS access, from zero (OPTIONAL — costs ~US$10/yr)
 
-You need this for access from outside the shop (and later for the v2 WhatsApp webhook). It requires a domain in a Cloudflare account.
+**Skippable.** The only paid piece is the domain; without it the app is fully functional on the shop LAN (`http://<server-ip>`). The `cloudflared` service is behind a compose profile, so if you skip this section it simply never starts — nothing to disable. Come back here when you want outside-the-shop access or the v2 WhatsApp webhook. Zero-cost alternative for private remote access (just you and the owner, no domain): install Tailscale on the server and your phones — but don't set it up until you actually need it.
+
+When you DO do this section: start the tunnel container with `docker compose --profile tunnel up -d` (step c.4 below).
+
+It requires a domain in a Cloudflare account.
 
 **a) Create the Cloudflare account** (free plan is enough — laptop, not server):
 Go to <https://dash.cloudflare.com/sign-up>, register, verify the email.
@@ -302,7 +306,7 @@ Go to <https://dash.cloudflare.com/sign-up>, register, verify the email.
 ```bash
 nano /opt/rp-management/.env     # TUNNEL_TOKEN=eyJ...
 cd /opt/rp-management/deploy
-docker compose up -d cloudflared
+docker compose --profile tunnel up -d
 docker compose logs cloudflared | tail -5   # expect "Registered tunnel connection" ×4
 ```
 
@@ -356,10 +360,10 @@ The backup disk protects against app mistakes and (if on a second physical drive
 
 ### 3.11 Final checklist
 
-- [ ] `docker compose ps` → 5 services Up (postgres, api, web, caddy, cloudflared)
+- [ ] `docker compose ps` → 4 services Up (postgres, api, web, caddy) — 5 with cloudflared if 3.7 was done
 - [ ] `curl http://localhost/healthz` → `{"status":"ok"}`
 - [ ] `http://<server-ip>` from another shop device → login works (LAN path)
-- [ ] `https://rp.<domain>` on mobile data → login works (tunnel path)
+- [ ] Only if 3.7 done: `https://rp.<domain>` on mobile data → login works (tunnel path)
 - [ ] Owner + employee users exist; employee sees no "Ajustes" section
 - [ ] `goose status` shows 0001–0009 applied
 - [ ] `/mnt/backup/rp/<today>/` has a dump > 1 KiB and the attachments tarball
