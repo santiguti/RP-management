@@ -12,6 +12,11 @@ type Config struct {
 	HTTPAddr       string
 	DatabaseURL    string
 	CookieSecret   string
+	// CookieSecure marks session/CSRF cookies as Secure (HTTPS-only). Must stay
+	// false while the app is reached over plain-HTTP LAN (browsers won't send
+	// Secure cookies to http://<lan-ip>); set true only when ALL access goes
+	// through an HTTPS front (e.g. the Cloudflare Tunnel).
+	CookieSecure   bool
 	AttachmentsDir string
 }
 
@@ -43,6 +48,7 @@ func loadBase() (Config, error) {
 		HTTPAddr:       getenv("HTTP_ADDR", ":8080"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
 		CookieSecret:   os.Getenv("COOKIE_SECRET"),
+		CookieSecure:   getenv("COOKIE_SECURE", "false") == "true",
 		AttachmentsDir: getenv("RP_ATTACHMENTS_DIR", "data/attachments"),
 	}
 

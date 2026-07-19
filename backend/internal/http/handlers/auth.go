@@ -142,7 +142,7 @@ func sessionCookie(cfg config.Config, value string, maxAge int) *http.Cookie {
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: true,
-		Secure:   cfg.AppEnv == "prod",
+		Secure:   cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	}
 }
@@ -154,7 +154,7 @@ func csrfCookie(cfg config.Config, value string, maxAge int) *http.Cookie {
 		Path:     "/",
 		MaxAge:   maxAge,
 		HttpOnly: false,
-		Secure:   cfg.AppEnv == "prod",
+		Secure:   cfg.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
 	}
 }

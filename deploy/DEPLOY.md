@@ -160,7 +160,9 @@ sudo apt install -y unattended-upgrades
 sudo dpkg-reconfigure -plow unattended-upgrades   # answer "Yes"
 ```
 
-### 3.2 Mount the backup disk
+### 3.2 Mount the backup disk (skippable if there's no second disk)
+
+**No second disk?** Skip this section — `backup.sh` will then write to `/mnt/backup` on the OS disk, which still protects against app-level mistakes (accidental deletes, bad imports) though not against the disk itself dying. Do the off-site backup (3.10) when possible.
 
 Identify the second (backup) disk — it's the one with no partitions:
 
@@ -223,11 +225,12 @@ POSTGRES_DB=rp
 POSTGRES_PASSWORD=<generated 32-hex>
 
 COOKIE_SECRET=<generated 64-hex>
+COOKIE_SECURE=false
 
 TUNNEL_TOKEN=
 ```
 
-Notes: the host in `DATABASE_URL` is `postgres` (the compose service name, not localhost). The password appears twice — literally inside `DATABASE_URL` and in `POSTGRES_PASSWORD` — and must match. `TUNNEL_TOKEN` stays empty until 3.7.
+Notes: the host in `DATABASE_URL` is `postgres` (the compose service name, not localhost). The password appears twice — literally inside `DATABASE_URL` and in `POSTGRES_PASSWORD` — and must match. `TUNNEL_TOKEN` stays empty until 3.7. `COOKIE_SECURE=false` is required while the shop uses the app over plain HTTP on the LAN — browsers refuse to send Secure cookies to an `http://<lan-ip>` address, which breaks login from every device except the server itself. Flip it to `true` only if ALL access moves to the HTTPS tunnel URL.
 
 ### 3.5 Build and start the stack
 
